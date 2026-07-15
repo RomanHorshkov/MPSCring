@@ -180,7 +180,11 @@ static int _slot_sequence_is_lock_free(const mpsc_slot_t* slot)
 
 size_t mpsc_ring_storage_size(uint64_t capacity)
 {
-    if((capacity == 0u) || ((capacity & (capacity - 1u)) != 0u))
+    /* Capacity 1 cannot represent distinct published/free sequence states: after the first
+     * publish, the sole slot's sequence is also exactly what position 1 would interpret as
+     * free, allowing a second producer to overwrite unread data. Vyukov's state machine
+     * therefore requires at least two slots. */
+    if((capacity < MPSC_RING_MIN_CAPACITY) || ((capacity & (capacity - 1u)) != 0u))
     {
         return 0u;
     }

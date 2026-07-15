@@ -25,7 +25,7 @@ jobs:
     uses: ./.github/workflows/quality.yml
 
   publish:
-    name: Build, sign, and publish
+    name: Build, attest, and publish
     needs: quality-gate
     runs-on: ubuntu-latest
     permissions:

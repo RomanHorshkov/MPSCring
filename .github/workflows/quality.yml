@@ -3,8 +3,9 @@ name: Quality
 # Connected graph, not five independent workflows racing each other on every push:
 #
 #   build
-#     +-- unit-tests-coverage                       (leaf: release UTs + 100% UT/IT coverage gate)
-#     +-- integration-stress -> sanitizers -> package-smoke
+#     +-- compiler-portability -----------------------------+
+#     +-- unit-tests-coverage                (leaf)          +--> package-smoke
+#     +-- integration-stress -> sanitizers + thread-sanitizer
 #
 # Also invocable as a reusable workflow (workflow_call) so release.yml can require it to pass
 # before cutting a release, instead of re-implementing the same gate.
@@ -36,6 +37,28 @@ jobs:
           sudo apt-get install -y build-essential
       - name: Build libraries
         run: ./utils/build_libs.sh
+
+  compiler-portability:
+    name: Strict compile (${{ matrix.compiler }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install compilers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang
+      - name: Compile public library with strict diagnostics
+        run: |
+          ${{ matrix.compiler }} -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+              -DMPSC_REQUIRE_ALWAYS_LOCK_FREE -Iapp -c app/mpscring.c \
+              -o /tmp/mpscring-${{ matrix.compiler }}.o
 
   unit-tests-coverage:
     name: "Release UTs + 100% UT/IT coverage gate"
@@ -81,7 +104,7 @@ jobs:
           /tmp/stress_mt
 
   sanitizers:
-    name: ASan, UBSan, LSan (UTs + ITs)
+    name: ASan, UBSan, LSan (UTs + ITs + stress)
     needs: integration-stress
     runs-on: ubuntu-latest
     steps:
@@ -92,12 +115,28 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libcmocka-dev
-      - name: Build and run sanitized UTs and ITs
+      - name: Build and run sanitized UTs, ITs, and stress
         run: ./utils/make_sanitizer_tests.sh
+
+  thread-sanitizer:
+    name: ThreadSanitizer (ITs + stress)
+    needs: integration-stress
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libcmocka-dev
+      - name: Build and run TSan ITs and stress
+        run: ./utils/make_tsan_tests.sh
 
   package-smoke:
     name: Package build + install + smoke test
-    needs: sanitizers
+    needs: [compiler-portability, unit-tests-coverage, sanitizers, thread-sanitizer]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -111,15 +150,13 @@ jobs:
         run: ./utils/build_deb.sh
       - name: Install the built .deb
         run: |
-          DEB_FILE="$(find build/debs -maxdepth 1 -name '*.deb' -print -quit)"
-          if [[ -z "${DEB_FILE}" ]]; then
-            echo "no .deb found under build/debs/" >&2
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          ARCH="$(dpkg --print-architecture)"
+          DEB_FILE="build/debs/mpscring_${VERSION}_${ARCH}.deb"
+          if [[ ! -f "${DEB_FILE}" ]]; then
+            echo "expected package not found: ${DEB_FILE}" >&2
             exit 1
           fi
-          # apt-get only treats an argument as a local file path if it starts with ./ or /;
-          # a bare relative path like "build/debs/foo.deb" (even though it contains slashes)
-          # is parsed as a REPOSITORY PACKAGE NAME instead and fails with a confusing
-          # "Unable to locate package build/debs" error.
           sudo apt-get install -y "./${DEB_FILE}"
       - name: Smoke test the installed package
         run: ./utils/smoke_test_package.sh

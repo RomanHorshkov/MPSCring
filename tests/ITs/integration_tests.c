@@ -77,8 +77,12 @@ static void test_storage_size_round_trip(void** state)
 
 /* ---------------------------------------------------------------------------------------- */
 
-#define IT_PRODUCERS 6u
-#define IT_PER_PRODUCER 20000u
+#ifndef IT_PRODUCERS
+#    define IT_PRODUCERS 6u
+#endif
+#ifndef IT_PER_PRODUCER
+#    define IT_PER_PRODUCER 20000u
+#endif
 #define IT_TOTAL ((uint64_t)IT_PRODUCERS * IT_PER_PRODUCER)
 
 typedef struct
@@ -87,6 +91,9 @@ typedef struct
     _Atomic uint64_t produced_sum;
     _Atomic uint64_t consumed_sum;
     _Atomic uint64_t consumed_count;
+    _Atomic int      invalid_delivery;
+    uint8_t          seen[(IT_TOTAL + 7u) / 8u];
+    uint32_t         next_sequence[IT_PRODUCERS];
 } it_ctx_t;
 
 static void* it_encode(uint32_t producer_id, uint32_t seq)
@@ -124,7 +131,40 @@ static void* it_consumer(void* arg_)
         void* item;
         if(mpsc_ring_pop(ctx->ring, &item) == 0)
         {
-            atomic_fetch_add_explicit(&ctx->consumed_sum, (uint64_t)(uintptr_t)item, memory_order_relaxed);
+            const uint64_t value        = (uint64_t)(uintptr_t)item;
+            const uint32_t producer_id  = (uint32_t)(value >> 32);
+            const uint32_t seq_plus_one = (uint32_t)value;
+
+            if(producer_id >= IT_PRODUCERS || seq_plus_one == 0u || seq_plus_one > IT_PER_PRODUCER)
+            {
+                atomic_store_explicit(&ctx->invalid_delivery, 1, memory_order_relaxed);
+            }
+            else
+            {
+                const uint32_t seq   = seq_plus_one - 1u;
+                const uint64_t index = (uint64_t)producer_id * IT_PER_PRODUCER + seq;
+                const size_t   byte  = (size_t)(index / 8u);
+                const uint8_t  mask  = (uint8_t)(1u << (index % 8u));
+
+                if((ctx->seen[byte] & mask) != 0u)
+                {
+                    atomic_store_explicit(&ctx->invalid_delivery, 1, memory_order_relaxed);
+                }
+                ctx->seen[byte] |= mask;
+
+                /* FIFO is global by claim order, and therefore necessarily preserves each
+                 * individual producer's program order even while producers interleave. */
+                if(seq != ctx->next_sequence[producer_id])
+                {
+                    atomic_store_explicit(&ctx->invalid_delivery, 1, memory_order_relaxed);
+                }
+                else
+                {
+                    ctx->next_sequence[producer_id]++;
+                }
+            }
+
+            atomic_fetch_add_explicit(&ctx->consumed_sum, value, memory_order_relaxed);
             atomic_fetch_add_explicit(&ctx->consumed_count, 1u, memory_order_relaxed);
         }
     }
@@ -163,11 +203,16 @@ static void test_concurrent_multi_producer_flow(void** state)
     }
     assert_int_equal(0, pthread_join(consumer, NULL));
 
-    /* Exactly-once delivery from every producer, through real concurrent contention on a
-     * deliberately small (256-slot) ring — not just "eventually drained," but sum-checked so
-     * loss/duplication/corruption would fail this even if the count happened to match. */
+    /* Exactly-once delivery under contention is proved by a bitmap over the complete item
+     * domain, not inferred from count+sum alone. Per-producer sequence tracking independently
+     * proves that interleaving never reorders one producer's own submissions. */
     assert_int_equal((int)atomic_load(&ctx.consumed_count), (int)IT_TOTAL);
     assert_int_equal((long long)atomic_load(&ctx.consumed_sum), (long long)atomic_load(&ctx.produced_sum));
+    assert_int_equal(0, atomic_load(&ctx.invalid_delivery));
+    for(uint32_t i = 0u; i < IT_PRODUCERS; ++i)
+    {
+        assert_int_equal((int)IT_PER_PRODUCER, (int)ctx.next_sequence[i]);
+    }
     assert_true(mpsc_ring_is_empty(ctx.ring));
 
     mpsc_ring_destroy(&ctx.ring);

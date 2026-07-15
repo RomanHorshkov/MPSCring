@@ -27,7 +27,7 @@
  *
  * Constraints:
  * - MANY producer threads, exactly ONE consumer thread.
- * - Capacity must be a power of two.
+ * - Capacity must be a power of two and at least `MPSC_RING_MIN_CAPACITY` (2).
  * - Elements stored are `void*` (opaque to this library — it carries pointers, it does not
  *   know or care what they point to; the DB_app write-queue that consumes this library
  *   stores pointers to caller-owned job structs, for example, but this library has zero
@@ -64,7 +64,7 @@
  *   storage and `mpsc_ring_destroy()` frees it. Fine for tests and callers that don't
  *   care where the bytes come from.
  * - `mpsc_ring_init_into(storage, storage_size, capacity)` is the embedded/NASA-style
- *   path: the CALLER owns the memory — a static buffer sized at compile time via
+ *   path: the CALLER owns the memory — a buffer sized at startup via
  *   `mpsc_ring_storage_size(capacity)`, a slab from a larger arena, whatever the owning
  *   layer's allocation policy is. This library never calls malloc on that path, and
  *   `mpsc_ring_destroy()` on a ring built this way releases nothing (there is nothing
@@ -78,6 +78,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/** Smallest capacity supported by the per-slot sequence-state algorithm. */
+#define MPSC_RING_MIN_CAPACITY UINT64_C(2)
+
 /**
  * @brief Opaque ring buffer handle.
  */
@@ -87,11 +90,12 @@ typedef struct mpsc_ring mpsc_ring_t;
  * @brief Bytes of storage `mpsc_ring_init_into` needs for a ring of the given capacity.
  *
  * Callers that want to own the memory (a static array, an arena slot, ...) compute this
- * once — typically at compile time, since `capacity` is normally a compile-time constant
- * for a statically-sized system — and reserve exactly that many bytes.
+ * once during configuration/startup and reserve that many bytes. This is a function, not a
+ * C integer constant expression; file-scope static arrays must use a deployment-specific
+ * conservative bound and validate it against this result at startup.
  *
- * @param capacity Number of elements the ring will hold. Must be a power of two.
- * @return Required byte count, or 0 if `capacity` is 0 or not a power of two.
+ * @param capacity Number of elements the ring will hold. Must be a power of two and >= 2.
+ * @return Required byte count, or 0 if `capacity` is below 2 or not a power of two.
  */
 size_t mpsc_ring_storage_size(uint64_t capacity);
 
@@ -99,14 +103,15 @@ size_t mpsc_ring_storage_size(uint64_t capacity);
  * @brief Create a ring buffer inside caller-owned memory — no allocation by this library.
  *
  * @param storage      Caller-owned memory, at least `storage_size` bytes. Ordinary buffer
- *                      alignment is enough (a plain static array, a stack buffer, or a
- *                      malloc'd block all qualify) — `mpsc_ring_storage_size()` already
+ *                      alignment is enough. Allocated storage is strictly portable; static or
+ *                      stack byte arenas use the documented GCC/Clang arena convention.
+ *                      `mpsc_ring_storage_size()` already
  *                      includes slack for this function to align the ring's internal
  *                      structures within `storage` itself; the caller does not need to
  *                      know or reason about this library's internal alignment needs.
  * @param storage_size Size of `storage` in bytes; must be >= `mpsc_ring_storage_size(capacity)`.
- * @param capacity     Number of elements the ring will hold. Must be a power of two.
- * @return Pointer to the ring (aliasing the start of `storage`) on success, or NULL on
+ * @param capacity     Number of elements the ring will hold. Must be a power of two and >= 2.
+ * @return Pointer to the aligned ring object within `storage` on success, or NULL on
  *         invalid arguments, undersized storage, or a target without a lock-free
  *         sequence-counter atomic.
  *
@@ -121,7 +126,7 @@ mpsc_ring_t* mpsc_ring_init_into(void* storage, size_t storage_size, uint64_t ca
  * Convenience wrapper over `mpsc_ring_init_into`: mallocs exactly `mpsc_ring_storage_size(
  * capacity)` bytes and remembers it owns them, so `mpsc_ring_destroy()` frees them.
  *
- * @param capacity Number of elements the ring can hold. Must be a power of two.
+ * @param capacity Number of elements the ring can hold. Must be a power of two and >= 2.
  * @return Pointer to a new ring on success, or NULL on invalid capacity, allocation
  *         failure, or a target without a lock-free sequence-counter atomic.
  *

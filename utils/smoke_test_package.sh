@@ -2,10 +2,8 @@
 set -euo pipefail
 
 # Package smoke test: proves the .deb genuinely works for an external consumer — compiles and
-# runs a tiny program against ONLY the installed system paths (/usr/local/include,
-# /usr/local/lib), never the repo's own build/ tree. This is deliberately NOT a rebuild of the
-# library: if this script had to compile app/mpscring.c itself, it would only prove the
-# SOURCE works, not that the shipped, installed PACKAGE does.
+# runs through the compiler's standard /usr include and multiarch library paths, never the
+# repository build tree. This deliberately tests the installed PACKAGE.
 
 START_DIR="$(pwd -P)"
 cleanup() { cd -- "${START_DIR}"; }
@@ -18,8 +16,8 @@ cd -- "${ROOT_DIR}"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "${WORK_DIR}"; cleanup' EXIT
 
-if [[ ! -f /usr/local/include/mpscring.h ]]; then
-    printf 'smoke_test_package: /usr/local/include/mpscring.h not found — install the .deb first\n' >&2
+if [[ ! -f /usr/include/mpscring.h ]]; then
+    printf 'smoke_test_package: /usr/include/mpscring.h not found — install the .deb first\n' >&2
     exit 1
 fi
 
@@ -49,9 +47,7 @@ int main(void)
 EOF
 
 gcc -std=c11 -Wall -Wextra -Werror \
-    -I/usr/local/include \
     "${WORK_DIR}/smoke.c" \
-    -L/usr/local/lib -Wl,-rpath,/usr/local/lib -lmpscring \
-    -o "${WORK_DIR}/smoke"
+    -lmpscring -o "${WORK_DIR}/smoke"
 
 "${WORK_DIR}/smoke"

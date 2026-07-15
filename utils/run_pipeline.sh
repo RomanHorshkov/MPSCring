@@ -11,8 +11,8 @@
 #
 #     ./utils/run_pipeline.sh
 #
-# ThreadSanitizer is OFF by default (it misbehaves on this host); set
-# GCC_BUILD_ENABLE_TSAN=1 to add the tsan profile where profiles apply.
+# ThreadSanitizer is OFF locally by default (it misbehaves on some hosts); set
+# GCC_BUILD_ENABLE_TSAN=1 to build the TSan profile and run the TSan IT/stress gate.
 # =============================================================================
 set -uo pipefail
 
@@ -115,6 +115,9 @@ stage "unit-tests-release" bash "${SCRIPT_DIR}/make_UTs_release.sh"
 stage "unit-tests-coverage" bash "${SCRIPT_DIR}/make_UTs_cov.sh"
 stage "integration-tests"  bash "${SCRIPT_DIR}/make_ITs.sh"
 stage "sanitizer-tests"    bash "${SCRIPT_DIR}/make_sanitizer_tests.sh"
+if [[ "${GCC_BUILD_ENABLE_TSAN:-0}" == "1" ]]; then
+    stage "thread-sanitizer-tests" bash "${SCRIPT_DIR}/make_tsan_tests.sh"
+fi
 stage "package"        bash "${SCRIPT_DIR}/build_deb.sh"
 
 report_coverage

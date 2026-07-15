@@ -3,7 +3,7 @@
 [![Quality](https://github.com/RomanHorshkov/MPSCring/actions/workflows/quality.yml/badge.svg)](https://github.com/RomanHorshkov/MPSCring/actions/workflows/quality.yml)
 [![Security](https://github.com/RomanHorshkov/MPSCring/actions/workflows/security.yml/badge.svg)](https://github.com/RomanHorshkov/MPSCring/actions/workflows/security.yml)
 [![Release](https://github.com/RomanHorshkov/MPSCring/actions/workflows/release.yml/badge.svg)](https://github.com/RomanHorshkov/MPSCring/actions/workflows/release.yml)
-[![Coverage](https://img.shields.io/badge/UT%2FIT_coverage-100%25-brightgreen)](tests/results/UTs/UTs_coverage.html)
+[![Coverage gate](https://img.shields.io/badge/line%20%2B%20branch-100%25%20gate-brightgreen)](https://github.com/RomanHorshkov/MPSCring/actions/workflows/quality.yml)
 [![Version](https://img.shields.io/github/v/tag/RomanHorshkov/MPSCring?label=version)](https://github.com/RomanHorshkov/MPSCring/tags)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -31,7 +31,7 @@ The following behaviors are part of the public interface and must remain stable:
 - Any number of producer threads may call `mpsc_ring_push` concurrently. Exactly one
   consumer thread may call `mpsc_ring_pop` — concurrent `pop` calls are undefined behavior
   (this is MPSC, not MPMC, even though the underlying per-slot algorithm generalizes to MPMC).
-- Capacity is fixed after initialization and must be a power of two.
+- Capacity is fixed after initialization, must be a power of two, and must be at least 2.
 - The ring stores `void*` values; it has no knowledge of what they point to.
 - `mpsc_ring_init(capacity)` owns and frees its own storage. `mpsc_ring_init_into(storage,
   storage_size, capacity)` uses caller-owned storage and never allocates — `mpsc_ring_destroy`
@@ -53,13 +53,15 @@ The following behaviors are part of the public interface and must remain stable:
   design — a long-published, widely implemented, provably-correct algorithm, not a new
   invention): a producer reads the shared `enqueue_pos`, checks that the target slot's
   sequence says "free for this position," and CAS-claims the position before writing.
-- Capacity must be a power of two; masking is used only for indexing.
+- Capacity must be a power of two and at least 2; masking is used only for indexing. A
+  one-slot queue cannot encode distinct published/free sequence states and is rejected.
 - Indices are 64-bit and monotonic, same wrap-time reasoning as SPSCring (irrelevant for
   any real workload — see SPSCring's README for the exact math, it applies identically here).
 - Two allocation modes, one control: `mpsc_ring_init` (library-owned, malloc-backed, the
   convenient default) and `mpsc_ring_init_into` (caller-owned storage — a static array sized
-  at compile time via `mpsc_ring_storage_size`, an arena slot, whatever the owning layer's
-  allocation policy is — this library never calls malloc on that path). The latter is the
+  from a deployment-specific bound or a runtime-sized arena slot validated with
+  `mpsc_ring_storage_size`; this function is not a C constant expression — this library never
+  calls malloc on that path). The latter is the
   intended path for callers that want static/startup-time-only allocation with no allocation
   surprises later in the process's life.
 
@@ -89,8 +91,8 @@ Builds are driven by scripts under `utils/`, mirroring SPSCring's:
   alone cannot reach `mpsc_ring_push`'s CAS-retry branch, which is only reachable under real
   producer contention; `tests/ITs/integration_tests.c` (a small, deliberately-contentious
   multi-producer flow) is what exercises it.
-- `utils/make_ITs.sh` / `utils/make_sanitizer_tests.sh` build and run `tests/ITs` — black-box,
-  public-API-only integration tests, distinct from the white-box `tests/UTs`.
+- `utils/make_ITs.sh` runs public-API black-box integration tests, distinct from white-box UTs.
+- `utils/make_sanitizer_tests.sh` runs UTs, ITs, and reduced stress under ASan/UBSan/LSan.
 - `tests/stress/stress_mt.c` is the large-scale concurrency proof: N producer threads pushing
   concurrently against 1 consumer thread. Correctness is a consumer-owned bitmap indexed by
   `(producer_id, sequence)`, tested-and-set on every consume — a duplicate delivery aborts the
@@ -100,18 +102,22 @@ Builds are driven by scripts under `utils/`, mirroring SPSCring's:
   (TSan's instrumentation overhead makes the full-size run impractically slow, not incorrect)
   — a correctness claim about concurrent code that hasn't been run under TSan at least once
   isn't really a correctness claim yet.
+- `utils/make_tsan_tests.sh` separately runs ITs and reduced stress under ThreadSanitizer;
+  TSan is never mixed with ASan.
 - `utils/build_deb.sh` builds the release deb + `SHA256SUMS`; `utils/smoke_test_package.sh`
-  compiles and runs a tiny program against ONLY the installed package (`/usr/local/include`,
-  `/usr/local/lib`), proving the shipped artifact works standalone, not just that the source
-  builds; `utils/run_pipeline.sh` runs the whole board (build, release UTs, coverage, ITs,
-  sanitizers, package).
+  compiles and runs a tiny program against ONLY the installed package (`/usr/include` and the
+  Debian multiarch library directory), proving the shipped artifact works standalone, not just
+  that the source builds; `utils/run_pipeline.sh` runs build, release UTs, atomic-counter
+  coverage, ITs, sanitizers, optional local TSan, and packaging.
 
 ## Continuous integration
 
 Three workflows, a connected graph rather than independent races on every push:
 
-- **Quality** (`.github/workflows/quality.yml`) — `build` → `unit-tests-coverage` (leaf) and
-  `integration-stress` → `sanitizers` → `package-smoke`. Also invocable as a reusable workflow.
+- **Quality** (`.github/workflows/quality.yml`) — `build` fans out to strict GCC/Clang
+  compilation, release UTs plus the 100% atomic-counter coverage gate, and threaded
+  integration/stress. Integration/stress gates both ASan/UBSan/LSan and TSan; every branch
+  must pass before package installation and smoke testing. Also reusable by releases.
 - **Security** (`.github/workflows/security.yml`) — CodeQL + GCC's `-fanalyzer`, on push/PR
   plus a weekly schedule.
 - **Release** (`.github/workflows/release.yml`) — requires Quality to pass, validates the

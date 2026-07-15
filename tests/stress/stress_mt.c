@@ -14,8 +14,9 @@
  * happen to cancel out; a bitmap has no such blind spot; also reports throughput, mirroring
  * this project's other stress tests (uuid7/tests/stress).
  *
- * Run this under the `sanitize` build profile (ASan/UBSan/TSan) — that is the actual
- * correctness bar for lock-free code, not just "the counts matched once."
+ * Run this under ASan/UBSan/LSan and, separately, ThreadSanitizer — that is the actual
+ * dynamic-analysis bar for concurrent code, not just "the counts matched once." The CI
+ * quality graph executes both variants with workloads sized for their instrumentation cost.
  */
 #include <assert.h>
 #include <pthread.h>
