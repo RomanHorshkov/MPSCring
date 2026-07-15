@@ -1,12 +1,21 @@
 # MPSCring
 
-Multi-Producer Single-Consumer (MPSC) ring buffer implemented in C11 with lock-free
-semantics for many producer threads and exactly one consumer thread. The data type is
-`void*` (opaque to this library) — sibling to [SPSCring](https://github.com/RomanHorshkov/SPSCring)
-(which is single-producer, `int`-typed, and intended for socket file descriptors); this one
-exists for the case where many threads need to hand work to one dedicated consumer thread
-concurrently, e.g. many request-handling threads submitting a database write to one
-dedicated writer thread.
+[![Quality](https://github.com/RomanHorshkov/MPSCring/actions/workflows/quality.yml/badge.svg)](https://github.com/RomanHorshkov/MPSCring/actions/workflows/quality.yml)
+[![Security](https://github.com/RomanHorshkov/MPSCring/actions/workflows/security.yml/badge.svg)](https://github.com/RomanHorshkov/MPSCring/actions/workflows/security.yml)
+[![Release](https://github.com/RomanHorshkov/MPSCring/actions/workflows/release.yml/badge.svg)](https://github.com/RomanHorshkov/MPSCring/actions/workflows/release.yml)
+[![Coverage](https://img.shields.io/badge/UT%2FIT_coverage-100%25-brightgreen)](tests/results/UTs/UTs_coverage.html)
+[![Version](https://img.shields.io/github/v/tag/RomanHorshkov/MPSCring?label=version)](https://github.com/RomanHorshkov/MPSCring/tags)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+Multi-Producer Single-Consumer (MPSC) ring buffer implemented in C11 with mutex-free
+semantics for many producer threads and exactly one consumer thread. NOT formally lock-free
+(see "Implementation choices" below) — a fast, CAS-based, mutex-free design, but Vyukov's own
+description of the underlying algorithm is explicit that a stalled producer can block the
+consumer's progress. The data type is `void*` (opaque to this library) — sibling to
+[SPSCring](https://github.com/RomanHorshkov/SPSCring) (which is single-producer, `int`-typed,
+and intended for socket file descriptors); this one exists for the case where many threads
+need to hand work to one dedicated consumer thread concurrently, e.g. many request-handling
+threads submitting a database write to one dedicated writer thread.
 
 Public API documentation is in `app/mpscring.h`.
 
@@ -69,19 +78,45 @@ Builds are driven by scripts under `utils/`, mirroring SPSCring's:
 
 - `utils/build_libs.sh [profile …]` builds the static and shared libraries per profile into
   `build/<profile>/` (release gated by `check_hardening.sh`).
-- `utils/make_UTs_release.sh` / `utils/make_sanitizer_tests.sh` build and run the unit tests
-  (`tests/UTs/unit_tests.c` — single-threaded contract: capacity validation, storage-size
-  arithmetic, full/empty boundaries, the two allocation modes, fault-injection on the
-  allocator and the lock-free checks).
-- `tests/stress/stress_mt.c` is the actual concurrency proof: N producer threads pushing
-  concurrently against 1 consumer thread, checksummed so any loss/duplication/corruption
-  fails the run, not just a count. Run it under the `sanitize` profile (ASan/UBSan) and,
-  separately, under ThreadSanitizer with a reduced `-DN_PER_PRODUCER=<small>` (TSan's
-  instrumentation overhead makes the full-size run impractically slow, not incorrect) — a
-  correctness claim about lock-free code that hasn't been run under TSan at least once isn't
-  really a correctness claim yet.
-- `utils/build_deb.sh` builds the release deb + `SHA256SUMS`; `utils/run_pipeline.sh` runs
-  the whole board.
+- `utils/make_UTs_release.sh` builds `tests/UTs/unit_tests.c` (single-threaded contract:
+  capacity validation, storage-size arithmetic, full/empty boundaries, the two allocation
+  modes, fault-injection on the allocator and the lock-free checks — the fault-injection tests
+  are compiled out entirely, not just skipped, when `MPSC_RING_TESTING` isn't defined, so this
+  release-profile run genuinely link-tests the shipped library, not a test-instrumented one)
+  and runs it with real (non-`NDEBUG`) assertions.
+- `utils/make_UTs_cov.sh` measures line/branch coverage across BOTH `tests/UTs` and
+  `tests/ITs` against one shared instrumented object (100% gate on both dimensions) — UTs
+  alone cannot reach `mpsc_ring_push`'s CAS-retry branch, which is only reachable under real
+  producer contention; `tests/ITs/integration_tests.c` (a small, deliberately-contentious
+  multi-producer flow) is what exercises it.
+- `utils/make_ITs.sh` / `utils/make_sanitizer_tests.sh` build and run `tests/ITs` — black-box,
+  public-API-only integration tests, distinct from the white-box `tests/UTs`.
+- `tests/stress/stress_mt.c` is the large-scale concurrency proof: N producer threads pushing
+  concurrently against 1 consumer thread. Correctness is a consumer-owned bitmap indexed by
+  `(producer_id, sequence)`, tested-and-set on every consume — a duplicate delivery aborts the
+  run immediately (a checksum/count pair alone cannot rule out two corruptions whose effects
+  on the sum cancel out; a bitmap has no such blind spot). Run it under the `sanitize` profile
+  (ASan/UBSan) and, separately, under ThreadSanitizer with a reduced `-DN_PER_PRODUCER=<small>`
+  (TSan's instrumentation overhead makes the full-size run impractically slow, not incorrect)
+  — a correctness claim about concurrent code that hasn't been run under TSan at least once
+  isn't really a correctness claim yet.
+- `utils/build_deb.sh` builds the release deb + `SHA256SUMS`; `utils/smoke_test_package.sh`
+  compiles and runs a tiny program against ONLY the installed package (`/usr/local/include`,
+  `/usr/local/lib`), proving the shipped artifact works standalone, not just that the source
+  builds; `utils/run_pipeline.sh` runs the whole board (build, release UTs, coverage, ITs,
+  sanitizers, package).
+
+## Continuous integration
+
+Three workflows, a connected graph rather than independent races on every push:
+
+- **Quality** (`.github/workflows/quality.yml`) — `build` → `unit-tests-coverage` (leaf) and
+  `integration-stress` → `sanitizers` → `package-smoke`. Also invocable as a reusable workflow.
+- **Security** (`.github/workflows/security.yml`) — CodeQL + GCC's `-fanalyzer`, on push/PR
+  plus a weekly schedule.
+- **Release** (`.github/workflows/release.yml`) — requires Quality to pass, validates the
+  pushed tag matches `VERSION`, builds the hardened package, attaches a build-provenance
+  attestation, and uploads to the GitHub Release.
 
 ## Dependencies
 

@@ -101,6 +101,21 @@ static void mpsc_ring_release_owned(void* ptr)
 #    define MPSC_CACHELINE 64u /* typical L1 line; only affects layout, not correctness */
 #endif
 
+/**
+ * @brief Sequence-number comparison without casting to a signed type.
+ *
+ * `diff` is `a - b` computed in uint64_t, which the C standard defines as wrapping modular
+ * arithmetic (no UB, unlike signed overflow). The real difference between any two sequence
+ * values this algorithm ever compares is always small in magnitude (bounded by the ring's
+ * capacity), so a "negative" true difference wraps to a huge unsigned value near UINT64_MAX,
+ * and a "non-negative" one stays small — comparing against UINT64_MAX/2 cleanly separates
+ * the two for any capacity nowhere near 2^63 (the same trick used for TCP sequence numbers).
+ * This replaces an earlier `(int64_t)a - (int64_t)b` form, which relied on an
+ * implementation-defined (pre-C23) conversion and contradicted this API's own "wrap-safe"
+ * claim.
+ */
+#define MPSC_SEQ_IS_NEGATIVE(diff) ((diff) > (UINT64_MAX / 2u))
+
 /** @brief One ring element: a sequence counter (the Vyukov state machine) plus the payload. */
 typedef struct mpsc_slot
 {
@@ -273,10 +288,13 @@ int mpsc_ring_push(mpsc_ring_t* ring, void* item)
     for(;;)
     {
         slot = &ring->buf[pos & ring->mask];
-        const uint64_t seq  = atomic_load_explicit(&slot->sequence, memory_order_acquire);
-        const int64_t  diff = (int64_t)seq - (int64_t)pos;
+        const uint64_t seq = atomic_load_explicit(&slot->sequence, memory_order_acquire);
+        /* Unsigned modular difference (see MPSC_SEQ_IS_NEGATIVE): avoids casting to a signed
+         * type, which is implementation-defined pre-C23 and, per the API's own "wrap-safe"
+         * claim, should never rely on signed overflow behavior at all. */
+        const uint64_t diff = seq - pos;
 
-        if(diff == 0)
+        if(diff == 0u)
         {
             /* This slot is free for position `pos` — try to claim it. On CAS failure `pos`
              * is updated in place to the current enqueue_pos by the intrinsic, so the loop
@@ -286,7 +304,7 @@ int mpsc_ring_push(mpsc_ring_t* ring, void* item)
                 break;
             }
         }
-        else if(diff < 0)
+        else if(MPSC_SEQ_IS_NEGATIVE(diff))
         {
             return -1; /* ring full: the slot this position would use isn't free yet */
         }
@@ -312,9 +330,9 @@ int mpsc_ring_pop(mpsc_ring_t* ring, void** out_item)
     const uint64_t pos  = ring->dequeue_pos;
     mpsc_slot_t*   slot = &ring->buf[pos & ring->mask];
     const uint64_t seq  = atomic_load_explicit(&slot->sequence, memory_order_acquire);
-    const int64_t  diff = (int64_t)seq - (int64_t)(pos + 1u);
+    const uint64_t diff = seq - (pos + 1u);
 
-    if(diff < 0)
+    if(MPSC_SEQ_IS_NEGATIVE(diff))
     {
         return -1; /* empty: the next slot to read hasn't been published yet */
     }
@@ -341,7 +359,7 @@ int mpsc_ring_is_empty(mpsc_ring_t* ring)
     const uint64_t     pos  = ring->dequeue_pos;
     const mpsc_slot_t* slot = &ring->buf[pos & ring->mask];
     const uint64_t     seq  = atomic_load_explicit(&slot->sequence, memory_order_acquire);
-    return ((int64_t)seq - (int64_t)(pos + 1u)) < 0;
+    return MPSC_SEQ_IS_NEGATIVE(seq - (pos + 1u));
 }
 
 uint64_t mpsc_ring_capacity(const mpsc_ring_t* ring)

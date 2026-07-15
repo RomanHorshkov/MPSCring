@@ -1,7 +1,7 @@
 /* Project: https://github.com/RomanHorshkov */
 /**
  * @file mpscring.h
- * @brief Bounded, lock-free multi-producer / single-consumer ring buffer API.
+ * @brief Bounded, mutex-free multi-producer / single-consumer ring buffer API.
  *
  * The single-producer/single-consumer sibling of this library, SPSCring, only ever needs
  * one thread to own the tail — this one relaxes that to MANY concurrent producer threads,
@@ -11,6 +11,19 @@
  * pointer) — a long-established, widely implemented, provably-correct design, not a new
  * invention. The single-consumer side keeps SPSCring's simplicity: only one thread ever
  * pops, so the head side needs no CAS at all, exactly the same asymmetry SPSCring exploits.
+ *
+ * NOT formally lock-free: this is a CAS-based, mutex-free algorithm, but Vyukov's own
+ * description of the bounded MPMC design (the basis for this implementation) is explicit
+ * that it does not meet the formal lock-free guarantee — a producer that wins the CAS
+ * claiming a slot and then stalls (is descheduled, killed, or blocked) before its
+ * subsequent plain write + release-store of that slot's sequence can prevent the consumer
+ * from ever observing that slot as published, i.e. progress is not guaranteed system-wide
+ * under an adversarial scheduler. In practice the claim-to-publish window is a few
+ * instructions (no syscalls, no allocation), so this is not a concern under normal
+ * scheduling — but a producer that dies or is suspended for a long time inside that window
+ * can wedge the ring for the consumer. Callers with a hard liveness requirement (must never
+ * stall regardless of producer misbehavior) need a different algorithm; callers accepting
+ * "fast in practice, blocking under producer suspension" should use this as intended.
  *
  * Constraints:
  * - MANY producer threads, exactly ONE consumer thread.
@@ -35,7 +48,12 @@
  * - `mpsc_ring_pop` is consumer-only — calling it from more than one thread concurrently is
  *   undefined behavior (this is MPSC, not MPMC, even though the underlying slot algorithm
  *   is generally an MPMC design).
- * - `mpsc_ring_is_empty` is a snapshot and may change concurrently.
+ * - `mpsc_ring_is_empty` is CONSUMER-ONLY, same as `mpsc_ring_pop` — it reads the
+ *   consumer-owned dequeue position, which is a plain (non-atomic) field precisely because
+ *   only the consumer thread ever touches it. Calling it from a producer or any other
+ *   thread is undefined behavior; a caller needing a producer-visible "is there anything
+ *   queued" signal must maintain that separately (e.g. the count this library's own users
+ *   track for observability).
  *
  * Lock-free target policy:
  * - `mpsc_ring_init`/`mpsc_ring_init_into` check the per-slot sequence atomics with C11
@@ -139,6 +157,10 @@ int mpsc_ring_pop(mpsc_ring_t* ring, void** out_item);
  *
  * @param ring Ring buffer instance.
  * @return 1 if empty, 0 otherwise. Returns 1 if `ring` is NULL.
+ *
+ * @note CONSUMER-ONLY, exactly like `mpsc_ring_pop` — it reads the plain (non-atomic)
+ *       consumer-owned dequeue position. Calling this from a producer thread or any thread
+ *       other than the single consumer is undefined behavior.
  */
 int mpsc_ring_is_empty(mpsc_ring_t* ring);
 

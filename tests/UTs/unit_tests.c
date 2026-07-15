@@ -14,7 +14,15 @@
 #include <string.h>
 
 #include "mpscring.h"
-#include "mpscring_test_hooks.h"
+
+/* Fault-injection hooks (mpsc_ring_test_set_allocators/set_lock_free_overrides/etc.) only
+ * exist in a build compiled with MPSC_RING_TESTING (see mpscring.c) — a release/production
+ * static or shared library never exports them. `make_UTs_release.sh` links this file against
+ * exactly that release library, so anything calling those symbols must be compiled out
+ * entirely on that path (matching SPSCring's own unit_tests.c convention exactly), or the
+ * release-profile unit test binary fails to link. */
+#ifdef MPSC_RING_TESTING
+#    include "mpscring_test_hooks.h"
 
 static int g_calloc_fail_after = -1; /* -1 = never fail */
 static int g_calloc_calls      = 0;
@@ -35,6 +43,7 @@ static void _reset_fault_injection(void)
     g_calloc_calls      = 0;
     mpsc_ring_test_reset_allocators();
 }
+#endif /* MPSC_RING_TESTING */
 
 static void test_capacity_validation(void)
 {
@@ -43,6 +52,9 @@ static void test_capacity_validation(void)
     assert(mpsc_ring_init(6) == NULL);   /* not a power of two */
     assert(mpsc_ring_storage_size(0) == 0u);
     assert(mpsc_ring_storage_size(5) == 0u);
+    /* A capacity so large that capacity * sizeof(slot) would overflow size_t: the storage-size
+     * overflow guard must reject it (rather than silently returning a truncated byte count). */
+    assert(mpsc_ring_storage_size((uint64_t)1 << 62) == 0u);
 
     mpsc_ring_t* r = mpsc_ring_init(1); /* smallest legal power of two */
     assert(r != NULL);
@@ -64,7 +76,11 @@ static void test_push_pop_fifo_single_thread(void)
     assert(mpsc_ring_push(r, (void*)99) != 0); /* full */
     assert(!mpsc_ring_is_empty(r));
 
-    for(intptr_t i = 1; i <= 8; ++i)
+    assert(mpsc_ring_pop(r, NULL) == 0); /* discard-on-pop path (out_item == NULL), non-empty ring */
+    assert(mpsc_ring_push(r, (void*)9) == 0); /* backfill so the drain loop below still sees 8 items */
+
+    /* Front item (1) was discarded above and 9 was appended, so the ring now holds 2..9 in order. */
+    for(intptr_t i = 2; i <= 9; ++i)
     {
         void* out = NULL;
         assert(mpsc_ring_pop(r, &out) == 0);
@@ -156,6 +172,12 @@ static void test_init_into_caller_owns_storage(void)
 
 static void test_init_into_rejects_undersized_storage(void)
 {
+    assert(mpsc_ring_init_into(NULL, 4096u, 64u) == NULL); /* NULL storage, rejected up front */
+
+    unsigned char scratch[4096];
+    assert(mpsc_ring_init_into(scratch, sizeof scratch, 0u) == NULL);  /* capacity 0 -> needed == 0 */
+    assert(mpsc_ring_init_into(scratch, sizeof scratch, 3u) == NULL);  /* not a power of two -> needed == 0 */
+
     const uint64_t cap  = 64u;
     const size_t   need = mpsc_ring_storage_size(cap);
     unsigned char* storage = malloc(need - 1u); /* deliberately one byte short */
@@ -168,6 +190,7 @@ static void test_init_into_rejects_undersized_storage(void)
     printf("test_init_into_rejects_undersized_storage: PASS\n");
 }
 
+#ifdef MPSC_RING_TESTING
 static void test_allocation_failure_path(void)
 {
     mpsc_ring_test_set_allocators(NULL, _test_calloc, free);
@@ -195,6 +218,7 @@ static void test_lock_free_rejection(void)
 
     printf("test_lock_free_rejection: PASS\n");
 }
+#endif /* MPSC_RING_TESTING */
 
 int main(void)
 {
@@ -204,8 +228,10 @@ int main(void)
     test_null_and_double_free_safety();
     test_init_into_caller_owns_storage();
     test_init_into_rejects_undersized_storage();
+#ifdef MPSC_RING_TESTING
     test_allocation_failure_path();
     test_lock_free_rejection();
+#endif
 
     printf("\nALL UNIT TESTS PASSED\n");
     return 0;

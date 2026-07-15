@@ -33,6 +33,10 @@ IFS='.' read -r MAJOR MINOR PATCH <<< "$VER"
 STAGE="${ROOT_DIR}/build/pkgroot"
 rm -rf "$STAGE"
 mkdir -p "$STAGE/DEBIAN" "$STAGE/usr/local/lib" "$STAGE/usr/local/include"
+# Explicit 0755: mkdir -p otherwise inherits the calling shell's umask, which on a permissive
+# umask (e.g. 002) yields group-writable (0775) directories in the shipped package — Debian
+# packages should never depend on umask for the mode of the paths they own.
+chmod 0755 "$STAGE" "$STAGE/DEBIAN" "$STAGE/usr" "$STAGE/usr/local" "$STAGE/usr/local/lib" "$STAGE/usr/local/include"
 
 # Install payload into /usr/local (inside the package)
 install -m 0644 app/mpscring.h "$STAGE/usr/local/include/mpscring.h"
@@ -56,7 +60,7 @@ Section: libs
 Priority: optional
 Architecture: $ARCH
 Maintainer: Roman Horshkov <https://github.com/RomanHorshkov>
-Description: Single-producer single-consumer lock-free ring buffer library
+Description: Bounded multi-producer single-consumer ring buffer library
 EOF
 
 # post installation script
