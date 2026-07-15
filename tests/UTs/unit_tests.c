@@ -1,0 +1,212 @@
+/* Project: https://github.com/RomanHorshkov */
+/**
+ * @file unit_tests.c
+ * @brief Single-threaded correctness + edge-case unit tests for MPSCring.
+ *
+ * Concurrency correctness (the actual point of "multi-producer") is proven separately by
+ * tests/stress/ under real contention and under ThreadSanitizer — these tests are the
+ * single-threaded contract: capacity validation, storage-size arithmetic, full/empty
+ * boundaries, the init_into vs init ownership distinction, and the lock-free-rejection path.
+ */
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "mpscring.h"
+#include "mpscring_test_hooks.h"
+
+static int g_calloc_fail_after = -1; /* -1 = never fail */
+static int g_calloc_calls      = 0;
+
+static void* _test_calloc(size_t count, size_t size)
+{
+    if(g_calloc_fail_after >= 0 && g_calloc_calls >= g_calloc_fail_after)
+    {
+        return NULL;
+    }
+    g_calloc_calls++;
+    return calloc(count, size);
+}
+
+static void _reset_fault_injection(void)
+{
+    g_calloc_fail_after = -1;
+    g_calloc_calls      = 0;
+    mpsc_ring_test_reset_allocators();
+}
+
+static void test_capacity_validation(void)
+{
+    assert(mpsc_ring_init(0) == NULL);
+    assert(mpsc_ring_init(3) == NULL);   /* not a power of two */
+    assert(mpsc_ring_init(6) == NULL);   /* not a power of two */
+    assert(mpsc_ring_storage_size(0) == 0u);
+    assert(mpsc_ring_storage_size(5) == 0u);
+
+    mpsc_ring_t* r = mpsc_ring_init(1); /* smallest legal power of two */
+    assert(r != NULL);
+    assert(mpsc_ring_capacity(r) == 1u);
+    mpsc_ring_destroy(&r);
+    printf("test_capacity_validation: PASS\n");
+}
+
+static void test_push_pop_fifo_single_thread(void)
+{
+    mpsc_ring_t* r = mpsc_ring_init(8);
+    assert(r != NULL);
+    assert(mpsc_ring_is_empty(r));
+
+    for(intptr_t i = 1; i <= 8; ++i)
+    {
+        assert(mpsc_ring_push(r, (void*)i) == 0);
+    }
+    assert(mpsc_ring_push(r, (void*)99) != 0); /* full */
+    assert(!mpsc_ring_is_empty(r));
+
+    for(intptr_t i = 1; i <= 8; ++i)
+    {
+        void* out = NULL;
+        assert(mpsc_ring_pop(r, &out) == 0);
+        assert((intptr_t)out == i); /* strict FIFO order */
+    }
+    assert(mpsc_ring_is_empty(r));
+    assert(mpsc_ring_pop(r, NULL) != 0); /* empty */
+
+    mpsc_ring_destroy(&r);
+    printf("test_push_pop_fifo_single_thread: PASS\n");
+}
+
+static void test_wrap_around(void)
+{
+    mpsc_ring_t* r = mpsc_ring_init(4);
+    assert(r != NULL);
+
+    /* Push/pop many more times than capacity so the internal index genuinely wraps
+     * (and, for the sequence scheme, laps the ring several times over). */
+    for(int lap = 0; lap < 1000; ++lap)
+    {
+        for(intptr_t i = 0; i < 4; ++i)
+        {
+            assert(mpsc_ring_push(r, (void*)(i + 1)) == 0);
+        }
+        for(intptr_t i = 0; i < 4; ++i)
+        {
+            void* out = NULL;
+            assert(mpsc_ring_pop(r, &out) == 0);
+            assert((intptr_t)out == i + 1);
+        }
+    }
+    assert(mpsc_ring_is_empty(r));
+    mpsc_ring_destroy(&r);
+    printf("test_wrap_around: PASS\n");
+}
+
+static void test_null_and_double_free_safety(void)
+{
+    assert(mpsc_ring_push(NULL, (void*)1) != 0);
+    assert(mpsc_ring_pop(NULL, NULL) != 0);
+    assert(mpsc_ring_is_empty(NULL) == 1);
+    assert(mpsc_ring_capacity(NULL) == 0u);
+
+    mpsc_ring_destroy(NULL); /* must not crash */
+    mpsc_ring_t* r = NULL;
+    mpsc_ring_destroy(&r); /* destroying an already-NULL ring must not crash */
+
+    r = mpsc_ring_init(2);
+    assert(r != NULL);
+    mpsc_ring_destroy(&r);
+    assert(r == NULL);
+    mpsc_ring_destroy(&r); /* double-destroy on the now-NULL local must be a no-op */
+    printf("test_null_and_double_free_safety: PASS\n");
+}
+
+static void test_init_into_caller_owns_storage(void)
+{
+    const uint64_t cap  = 16u;
+    const size_t   need = mpsc_ring_storage_size(cap);
+    assert(need > 0u);
+
+    unsigned char storage[4096];
+    assert(need <= sizeof(storage));
+    memset(storage, 0xAA, sizeof(storage)); /* poison, to prove init_into initializes what it needs */
+
+    mpsc_ring_t* r = mpsc_ring_init_into(storage, sizeof(storage), cap);
+    assert(r != NULL);
+    assert(mpsc_ring_capacity(r) == cap);
+
+    for(intptr_t i = 1; i <= (intptr_t)cap; ++i)
+    {
+        assert(mpsc_ring_push(r, (void*)i) == 0);
+    }
+    for(intptr_t i = 1; i <= (intptr_t)cap; ++i)
+    {
+        void* out = NULL;
+        assert(mpsc_ring_pop(r, &out) == 0);
+        assert((intptr_t)out == i);
+    }
+
+    /* destroy() on an init_into ring must free NOTHING — `storage` is a stack array; if
+     * this called free() on it (or on any part of it) the test process would abort or
+     * corrupt on return. Reaching the end of this function is itself the assertion. */
+    mpsc_ring_destroy(&r);
+    assert(r == NULL);
+    printf("test_init_into_caller_owns_storage: PASS\n");
+}
+
+static void test_init_into_rejects_undersized_storage(void)
+{
+    const uint64_t cap  = 64u;
+    const size_t   need = mpsc_ring_storage_size(cap);
+    unsigned char* storage = malloc(need - 1u); /* deliberately one byte short */
+    assert(storage != NULL);
+
+    mpsc_ring_t* r = mpsc_ring_init_into(storage, need - 1u, cap);
+    assert(r == NULL);
+
+    free(storage);
+    printf("test_init_into_rejects_undersized_storage: PASS\n");
+}
+
+static void test_allocation_failure_path(void)
+{
+    mpsc_ring_test_set_allocators(NULL, _test_calloc, free);
+    g_calloc_fail_after = 0; /* fail the very first calloc: the owned-storage allocation */
+    g_calloc_calls       = 0;
+
+    mpsc_ring_t* r = mpsc_ring_init(16);
+    assert(r == NULL);
+
+    _reset_fault_injection();
+    printf("test_allocation_failure_path: PASS\n");
+}
+
+static void test_lock_free_rejection(void)
+{
+    mpsc_ring_test_set_lock_free_overrides(0, -1); /* force "enqueue_pos is not lock-free" */
+    mpsc_ring_t* r = mpsc_ring_init(8);
+    assert(r == NULL);
+    mpsc_ring_test_reset_allocators();
+
+    mpsc_ring_test_set_lock_free_overrides(-1, 0); /* force "slot sequence is not lock-free" */
+    r = mpsc_ring_init(8);
+    assert(r == NULL);
+    mpsc_ring_test_reset_allocators();
+
+    printf("test_lock_free_rejection: PASS\n");
+}
+
+int main(void)
+{
+    test_capacity_validation();
+    test_push_pop_fifo_single_thread();
+    test_wrap_around();
+    test_null_and_double_free_safety();
+    test_init_into_caller_owns_storage();
+    test_init_into_rejects_undersized_storage();
+    test_allocation_failure_path();
+    test_lock_free_rejection();
+
+    printf("\nALL UNIT TESTS PASSED\n");
+    return 0;
+}
