@@ -283,6 +283,48 @@ static void test_lock_free_rejection(void)
 
     printf("test_lock_free_rejection: PASS\n");
 }
+
+/* mpsc_ring_push()'s claim CAS (atomic_compare_exchange_weak on enqueue_pos) only fails when a
+ * DIFFERENT producer wins the SAME claim between our load and our CAS attempt — a branch that,
+ * single-threaded, never fires on its own. tests/ITs' real multi-producer flow normally exercises
+ * it, but that depends on genuine OS thread contention: on a resource-constrained CI runner (2
+ * vCPUs) it can go un-hit often enough to fail the 100% branch-coverage gate even though the same
+ * build passes reliably on a many-core dev box (reproduced locally with `taskset -c 0`). The hook
+ * below forces it deterministically instead of hoping for lucky scheduling. */
+static mpsc_ring_t* g_race_ring = NULL;
+
+static void _steal_enqueue_pos(void)
+{
+    /* Called from INSIDE the outer push(), after it has already loaded its local `pos` snapshot
+     * but before its CAS attempt. This is a raw position bump, not a full push() — see
+     * mpsc_ring_test_steal_enqueue_pos()'s doc comment for why that distinction matters: a full
+     * nested push() also publishes the slot, which would make the outer call take the
+     * ALREADY-covered "someone published past us" branch instead of ever reaching the CAS. */
+    mpsc_ring_test_steal_enqueue_pos(g_race_ring);
+}
+
+static void test_push_retries_when_enqueue_pos_races_underneath(void)
+{
+    mpsc_ring_test_steal_enqueue_pos(NULL); /* must not crash; nothing else to observe */
+
+    mpsc_ring_t* r = mpsc_ring_init(4);
+    assert(r != NULL);
+    g_race_ring = r;
+
+    int real_value = 42;
+    mpsc_ring_test_set_push_hook(_steal_enqueue_pos);
+    assert(mpsc_ring_push(r, &real_value) == 0); /* hook fires once, forces a CAS retry, then succeeds */
+
+    /* No pop() here: the stolen position (index 0) was bumped past but never published, so
+     * pop()'s strictly-sequential drain correctly reports "not ready" forever at that index — a
+     * real competing producer always eventually publishes, so this stuck state can never occur
+     * outside this synthetic single-threaded simulant. The push()'s return value above is the
+     * whole point of this test (CAS-failure retry, then success); round-trip FIFO correctness is
+     * already covered by every other single-threaded test in this file. */
+    g_race_ring = NULL;
+    mpsc_ring_destroy(&r);
+    printf("test_push_retries_when_enqueue_pos_races_underneath: PASS\n");
+}
 #endif /* MPSC_RING_TESTING */
 
 int main(void)
@@ -299,6 +341,7 @@ int main(void)
 #ifdef MPSC_RING_TESTING
     test_allocation_failure_path();
     test_lock_free_rejection();
+    test_push_retries_when_enqueue_pos_races_underneath();
 #endif
 
     printf("\nALL UNIT TESTS PASSED\n");

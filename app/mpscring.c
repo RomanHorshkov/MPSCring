@@ -59,6 +59,7 @@ static mpsc_ring_test_calloc_fn        mpsc_ring_calloc_allocator          = NUL
 static mpsc_ring_test_free_fn          mpsc_ring_free_allocator           = free;
 static int                             mpsc_ring_enqueue_lock_free_override = -1;
 static int                             mpsc_ring_slot_lock_free_override    = -1;
+static mpsc_ring_test_push_hook_fn     mpsc_ring_push_hook                  = NULL;
 
 void mpsc_ring_test_set_allocators(mpsc_ring_test_aligned_alloc_fn aligned_allocator, mpsc_ring_test_calloc_fn calloc_allocator,
                                    mpsc_ring_test_free_fn free_allocator)
@@ -75,12 +76,18 @@ void mpsc_ring_test_reset_allocators(void)
     mpsc_ring_free_allocator            = free;
     mpsc_ring_enqueue_lock_free_override = -1;
     mpsc_ring_slot_lock_free_override    = -1;
+    mpsc_ring_push_hook                  = NULL;
 }
 
 void mpsc_ring_test_set_lock_free_overrides(int enqueue_pos_is_lock_free, int slot_sequence_is_lock_free)
 {
     mpsc_ring_enqueue_lock_free_override = enqueue_pos_is_lock_free;
     mpsc_ring_slot_lock_free_override    = slot_sequence_is_lock_free;
+}
+
+void mpsc_ring_test_set_push_hook(mpsc_ring_test_push_hook_fn hook)
+{
+    mpsc_ring_push_hook = hook;
 }
 
 static void* mpsc_ring_allocate_owned(size_t size)
@@ -289,6 +296,17 @@ int mpsc_ring_push(mpsc_ring_t* ring, void* item)
     uint64_t pos = atomic_load_explicit(&ring->enqueue_pos, memory_order_relaxed);
     mpsc_slot_t* slot;
 
+#ifdef MPSC_RING_TESTING
+    /* Single-shot: read-then-clear before calling, so a hook body that runs another push()
+     * on a DIFFERENT ring (or none at all) can never recurse into this same call. */
+    if(mpsc_ring_push_hook)
+    {
+        mpsc_ring_test_push_hook_fn hook = mpsc_ring_push_hook;
+        mpsc_ring_push_hook              = NULL;
+        hook();
+    }
+#endif
+
     for(;;)
     {
         slot = &ring->buf[pos & ring->mask];
@@ -323,6 +341,20 @@ int mpsc_ring_push(mpsc_ring_t* ring, void* item)
     atomic_store_explicit(&slot->sequence, pos + 1u, memory_order_release);
     return 0;
 }
+
+#ifdef MPSC_RING_TESTING
+void mpsc_ring_test_steal_enqueue_pos(mpsc_ring_t* ring)
+{
+    if(ring == NULL)
+    {
+        return;
+    }
+    /* A raw position bump — deliberately NOT a full push(): see this function's doc comment
+     * in mpscring_test_hooks.h for why a real competing producer can only be simulated by
+     * moving the position and nothing else. The position stolen here is never published. */
+    atomic_fetch_add_explicit(&ring->enqueue_pos, 1u, memory_order_relaxed);
+}
+#endif
 
 int mpsc_ring_pop(mpsc_ring_t* ring, void** out_item)
 {
