@@ -1,9 +1,9 @@
 # MPSCring
 
-[![Quality](https://github.com/RomanHorshkov/MPSCring/actions/workflows/quality.yml/badge.svg)](https://github.com/RomanHorshkov/MPSCring/actions/workflows/quality.yml)
-[![Security](https://github.com/RomanHorshkov/MPSCring/actions/workflows/security.yml/badge.svg)](https://github.com/RomanHorshkov/MPSCring/actions/workflows/security.yml)
-[![Release](https://github.com/RomanHorshkov/MPSCring/actions/workflows/release.yml/badge.svg)](https://github.com/RomanHorshkov/MPSCring/actions/workflows/release.yml)
-[![Coverage gate](https://img.shields.io/badge/line%20%2B%20branch-100%25%20gate-brightgreen)](https://github.com/RomanHorshkov/MPSCring/actions/workflows/quality.yml)
+[![Quality](https://github.com/RomanHorshkov/MPSCring/actions/workflows/quality.yml/badge.svg?branch=master)](https://github.com/RomanHorshkov/MPSCring/actions/workflows/quality.yml?query=branch%3Amaster)
+[![Security](https://github.com/RomanHorshkov/MPSCring/actions/workflows/security.yml/badge.svg?branch=master)](https://github.com/RomanHorshkov/MPSCring/actions/workflows/security.yml?query=branch%3Amaster)
+[![Release](https://github.com/RomanHorshkov/MPSCring/actions/workflows/release.yml/badge.svg?branch=master)](https://github.com/RomanHorshkov/MPSCring/actions/workflows/release.yml?query=branch%3Amaster)
+![Coverage](.github/badges/coverage.svg)
 [![Version](https://img.shields.io/github/v/tag/RomanHorshkov/MPSCring?label=version)](https://github.com/RomanHorshkov/MPSCring/tags)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
