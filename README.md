@@ -80,19 +80,19 @@ Builds are driven by scripts under `utils/`, mirroring SPSCring's:
 
 - `utils/build_libs.sh [profile …]` builds the static and shared libraries per profile into
   `build/<profile>/` (release gated by `check_hardening.sh`).
-- `utils/make_UTs_release.sh` builds `tests/UTs/unit_tests.c` (single-threaded contract:
+- `utils/build_UTs_release.sh` builds `tests/UTs/unit_tests.c` (single-threaded contract:
   capacity validation, storage-size arithmetic, full/empty boundaries, the two allocation
   modes, fault-injection on the allocator and the lock-free checks — the fault-injection tests
   are compiled out entirely, not just skipped, when `MPSC_RING_TESTING` isn't defined, so this
   release-profile run genuinely link-tests the shipped library, not a test-instrumented one)
   and runs it with real (non-`NDEBUG`) assertions.
-- `utils/make_UTs_cov.sh` measures line/branch coverage across BOTH `tests/UTs` and
+- `utils/build_UTs.sh` measures line/branch coverage across BOTH `tests/UTs` and
   `tests/ITs` against one shared instrumented object (100% gate on both dimensions) — UTs
   alone cannot reach `mpsc_ring_push`'s CAS-retry branch, which is only reachable under real
   producer contention; `tests/ITs/integration_tests.c` (a small, deliberately-contentious
   multi-producer flow) is what exercises it.
-- `utils/make_ITs.sh` runs public-API black-box integration tests, distinct from white-box UTs.
-- `utils/make_sanitizer_tests.sh` runs UTs, ITs, and reduced stress under ASan/UBSan/LSan.
+- `utils/build_ITs.sh` runs public-API black-box integration tests, distinct from white-box UTs.
+- `utils/build_sanitizer_tests.sh` runs UTs, ITs, and reduced stress under ASan/UBSan/LSan.
 - `tests/stress/stress_mt.c` is the large-scale concurrency proof: N producer threads pushing
   concurrently against 1 consumer thread. Correctness is a consumer-owned bitmap indexed by
   `(producer_id, sequence)`, tested-and-set on every consume — a duplicate delivery aborts the
@@ -102,13 +102,15 @@ Builds are driven by scripts under `utils/`, mirroring SPSCring's:
   (TSan's instrumentation overhead makes the full-size run impractically slow, not incorrect)
   — a correctness claim about concurrent code that hasn't been run under TSan at least once
   isn't really a correctness claim yet.
-- `utils/make_tsan_tests.sh` separately runs ITs and reduced stress under ThreadSanitizer;
+- `utils/build_tsan_tests.sh` separately runs ITs and reduced stress under ThreadSanitizer;
   TSan is never mixed with ASan.
 - `utils/build_deb.sh` builds the release deb + `SHA256SUMS`; `utils/smoke_test_package.sh`
   compiles and runs a tiny program against ONLY the installed package (`/usr/include` and the
   Debian multiarch library directory), proving the shipped artifact works standalone, not just
-  that the source builds; `utils/run_pipeline.sh` runs build, release UTs, atomic-counter
-  coverage, ITs, sanitizers, optional local TSan, and packaging.
+  that the source builds; `utils/build_stress.sh` + `utils/run_stress.sh` build and run the
+  stress test (results under `tests/results/stress/`); `utils/run_pipeline.sh` runs build,
+  release UTs, atomic-counter coverage, ITs, sanitizers, stress, optional local TSan, and
+  packaging.
 
 ## Continuous integration
 

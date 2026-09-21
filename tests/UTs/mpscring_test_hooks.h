@@ -35,7 +35,7 @@ void mpsc_ring_test_set_lock_free_overrides(int enqueue_pos_is_lock_free, int sl
  * construction otherwise only fires under genuine concurrent contention between real OS
  * threads — exactly the kind of thing that passes reliably on a many-core dev box but flakes
  * under a resource-constrained CI runner (reproduced locally with `taskset -c 0`; see the
- * coverage job's own comment in make_UTs_cov.sh). A hook body typically calls
+ * coverage job's own comment in build_UTs.sh). A hook body typically calls
  * mpsc_ring_test_steal_enqueue_pos() on the same ring — see that function's own doc comment
  * for why a raw position bump, not a full nested push(), is the right simulant here.
  */

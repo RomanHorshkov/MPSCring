@@ -17,7 +17,7 @@
 
 /* Fault-injection hooks (mpsc_ring_test_set_allocators/set_lock_free_overrides/etc.) only
  * exist in a build compiled with MPSC_RING_TESTING (see mpscring.c) — a release/production
- * static or shared library never exports them. `make_UTs_release.sh` links this file against
+ * static or shared library never exports them. `build_UTs_release.sh` links this file against
  * exactly that release library, so anything calling those symbols must be compiled out
  * entirely on that path (matching SPSCring's own unit_tests.c convention exactly), or the
  * release-profile unit test binary fails to link. */
