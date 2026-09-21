@@ -25,8 +25,6 @@ VER="$(tr -d '[:space:]' < VERSION)"
 ./utils/build_libs.sh release
 
 ARCH="$(dpkg --print-architecture)"
-MULTIARCH="$(gcc -print-multiarch)"
-[[ -n "${MULTIARCH}" ]] || die "compiler did not report a Debian multiarch tuple"
 
 # Split version safely (keep IFS local)
 IFS='.' read -r MAJOR MINOR PATCH <<< "$VER"
@@ -34,15 +32,16 @@ IFS='.' read -r MAJOR MINOR PATCH <<< "$VER"
 # Prepare package staging dir (kept under build/ so it doesn't pollute the repo root).
 STAGE="${ROOT_DIR}/build/pkgroot"
 rm -rf "$STAGE"
-LIB_DIR="$STAGE/usr/lib/$MULTIARCH"
-INCLUDE_DIR="$STAGE/usr/include"
+# /usr/local, the same layout every sibling library (uuid7, EMlog, SPSCring) ships with,
+# so one consumer-side rule covers them all.
+LIB_DIR="$STAGE/usr/local/lib"
+INCLUDE_DIR="$STAGE/usr/local/include"
 mkdir -p "$STAGE/DEBIAN" "$LIB_DIR" "$INCLUDE_DIR"
 # Explicit 0755: mkdir -p otherwise inherits the calling shell's umask, which on a permissive
 # umask (e.g. 002) yields group-writable (0775) directories in the shipped package — Debian
 # packages should never depend on umask for the mode of the paths they own.
-chmod 0755 "$STAGE" "$STAGE/DEBIAN" "$STAGE/usr" "$STAGE/usr/lib" "$LIB_DIR" "$INCLUDE_DIR"
+chmod 0755 "$STAGE" "$STAGE/DEBIAN" "$STAGE/usr" "$STAGE/usr/local" "$LIB_DIR" "$INCLUDE_DIR"
 
-# Debian-managed payload belongs under /usr, not the administrator-owned /usr/local tree.
 install -m 0644 app/mpscring.h "$INCLUDE_DIR/mpscring.h"
 
 install -m 0755 "build/release/libmpscring.so.$VER" "$LIB_DIR/libmpscring.so.$VER"

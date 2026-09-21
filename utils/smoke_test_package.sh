@@ -16,8 +16,8 @@ cd -- "${ROOT_DIR}"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "${WORK_DIR}"; cleanup' EXIT
 
-if [[ ! -f /usr/include/mpscring.h ]]; then
-    printf 'smoke_test_package: /usr/include/mpscring.h not found — install the .deb first\n' >&2
+if [[ ! -f /usr/local/include/mpscring.h ]]; then
+    printf 'smoke_test_package: /usr/local/include/mpscring.h not found — install the .deb first\n' >&2
     exit 1
 fi
 
@@ -47,7 +47,9 @@ int main(void)
 EOF
 
 gcc -std=c11 -Wall -Wextra -Werror \
+    -I/usr/local/include \
     "${WORK_DIR}/smoke.c" \
-    -lmpscring -o "${WORK_DIR}/smoke"
+    -L/usr/local/lib -Wl,-rpath,/usr/local/lib -lmpscring \
+    -o "${WORK_DIR}/smoke"
 
 "${WORK_DIR}/smoke"

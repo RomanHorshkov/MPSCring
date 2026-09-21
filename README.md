@@ -4,7 +4,6 @@
 [![Security](https://github.com/RomanHorshkov/MPSCring/actions/workflows/security.yml/badge.svg?branch=master)](https://github.com/RomanHorshkov/MPSCring/actions/workflows/security.yml?query=branch%3Amaster)
 [![Release](https://github.com/RomanHorshkov/MPSCring/actions/workflows/release.yml/badge.svg?branch=master)](https://github.com/RomanHorshkov/MPSCring/actions/workflows/release.yml?query=branch%3Amaster)
 ![Coverage](.github/badges/coverage.svg)
-[![Version](https://img.shields.io/github/v/tag/RomanHorshkov/MPSCring?label=version)](https://github.com/RomanHorshkov/MPSCring/tags)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Multi-Producer Single-Consumer (MPSC) ring buffer implemented in C11 with mutex-free
@@ -105,8 +104,8 @@ Builds are driven by scripts under `utils/`, mirroring SPSCring's:
 - `utils/build_tsan_tests.sh` separately runs ITs and reduced stress under ThreadSanitizer;
   TSan is never mixed with ASan.
 - `utils/build_deb.sh` builds the release deb + `SHA256SUMS`; `utils/smoke_test_package.sh`
-  compiles and runs a tiny program against ONLY the installed package (`/usr/include` and the
-  Debian multiarch library directory), proving the shipped artifact works standalone, not just
+  compiles and runs a tiny program against ONLY the installed package (`/usr/local/include`,
+  `/usr/local/lib`), proving the shipped artifact works standalone, not just
   that the source builds; `utils/build_stress.sh` + `utils/run_stress.sh` build and run the
   stress test (results under `tests/results/stress/`); `utils/run_pipeline.sh` runs build,
   release UTs, atomic-counter coverage, ITs, sanitizers, stress, optional local TSan, and
