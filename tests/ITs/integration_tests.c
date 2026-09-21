@@ -11,12 +11,14 @@
 #include <pthread.h>
 #include <setjmp.h>
 #include <stdarg.h>
-#include <stdatomic.h>
 #include <stddef.h>
+
+#include <cmocka.h>
+
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdlib.h>
 
-#include <cmocka.h>
 #include "mpscring.h"
 
 static void test_simple_flow(void** state)
@@ -87,7 +89,7 @@ static void test_storage_size_round_trip(void** state)
 
 typedef struct
 {
-    mpsc_ring_t*    ring;
+    mpsc_ring_t*     ring;
     _Atomic uint64_t produced_sum;
     _Atomic uint64_t consumed_sum;
     _Atomic uint64_t consumed_count;

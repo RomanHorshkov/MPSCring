@@ -48,9 +48,9 @@ static void _reset_fault_injection(void)
 static void test_capacity_validation(void)
 {
     assert(mpsc_ring_init(0) == NULL);
-    assert(mpsc_ring_init(1) == NULL);   /* one slot aliases published and free states */
-    assert(mpsc_ring_init(3) == NULL);   /* not a power of two */
-    assert(mpsc_ring_init(6) == NULL);   /* not a power of two */
+    assert(mpsc_ring_init(1) == NULL); /* one slot aliases published and free states */
+    assert(mpsc_ring_init(3) == NULL); /* not a power of two */
+    assert(mpsc_ring_init(6) == NULL); /* not a power of two */
     assert(mpsc_ring_storage_size(0) == 0u);
     assert(mpsc_ring_storage_size(1) == 0u);
     assert(mpsc_ring_storage_size(5) == 0u);
@@ -111,15 +111,15 @@ static void test_push_pop_fifo_single_thread(void)
     assert(mpsc_ring_push(r, (void*)99) != 0); /* full */
     assert(!mpsc_ring_is_empty(r));
 
-    assert(mpsc_ring_pop(r, NULL) == 0); /* discard-on-pop path (out_item == NULL), non-empty ring */
-    assert(mpsc_ring_push(r, (void*)9) == 0); /* backfill so the drain loop below still sees 8 items */
+    assert(mpsc_ring_pop(r, NULL) == 0);       /* discard-on-pop path (out_item == NULL), non-empty ring */
+    assert(mpsc_ring_push(r, (void*)9) == 0);  /* backfill so the drain loop below still sees 8 items */
 
     /* Front item (1) was discarded above and 9 was appended, so the ring now holds 2..9 in order. */
     for(intptr_t i = 2; i <= 9; ++i)
     {
         void* out = NULL;
         assert(mpsc_ring_pop(r, &out) == 0);
-        assert((intptr_t)out == i); /* strict FIFO order */
+        assert((intptr_t)out == i);      /* strict FIFO order */
     }
     assert(mpsc_ring_is_empty(r));
     assert(mpsc_ring_pop(r, NULL) != 0); /* empty */
@@ -162,7 +162,7 @@ static void test_null_and_double_free_safety(void)
 
     mpsc_ring_destroy(NULL); /* must not crash */
     mpsc_ring_t* r = NULL;
-    mpsc_ring_destroy(&r); /* destroying an already-NULL ring must not crash */
+    mpsc_ring_destroy(&r);   /* destroying an already-NULL ring must not crash */
 
     r = mpsc_ring_init(2);
     assert(r != NULL);
@@ -237,14 +237,14 @@ static void test_init_into_exact_size_at_every_alignment(void)
 
 static void test_init_into_rejects_undersized_storage(void)
 {
-    assert(mpsc_ring_init_into(NULL, 4096u, 64u) == NULL); /* NULL storage, rejected up front */
+    assert(mpsc_ring_init_into(NULL, 4096u, 64u) == NULL);            /* NULL storage, rejected up front */
 
     unsigned char scratch[4096];
-    assert(mpsc_ring_init_into(scratch, sizeof scratch, 0u) == NULL);  /* capacity 0 -> needed == 0 */
-    assert(mpsc_ring_init_into(scratch, sizeof scratch, 3u) == NULL);  /* not a power of two -> needed == 0 */
+    assert(mpsc_ring_init_into(scratch, sizeof scratch, 0u) == NULL); /* capacity 0 -> needed == 0 */
+    assert(mpsc_ring_init_into(scratch, sizeof scratch, 3u) == NULL); /* not a power of two -> needed == 0 */
 
-    const uint64_t cap  = 64u;
-    const size_t   need = mpsc_ring_storage_size(cap);
+    const uint64_t cap     = 64u;
+    const size_t   need    = mpsc_ring_storage_size(cap);
     unsigned char* storage = malloc(need - 1u); /* deliberately one byte short */
     assert(storage != NULL);
 
@@ -260,7 +260,7 @@ static void test_allocation_failure_path(void)
 {
     mpsc_ring_test_set_allocators(NULL, _test_calloc, free);
     g_calloc_fail_after = 0; /* fail the very first calloc: the owned-storage allocation */
-    g_calloc_calls       = 0;
+    g_calloc_calls      = 0;
 
     mpsc_ring_t* r = mpsc_ring_init(16);
     assert(r == NULL);

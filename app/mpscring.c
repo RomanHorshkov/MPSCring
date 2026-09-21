@@ -55,8 +55,8 @@
 #    include "mpscring_test_hooks.h"
 
 static mpsc_ring_test_aligned_alloc_fn mpsc_ring_aligned_allocator          = NULL; /* unused: init_into never mallocs */
-static mpsc_ring_test_calloc_fn        mpsc_ring_calloc_allocator          = NULL;  /* set below */
-static mpsc_ring_test_free_fn          mpsc_ring_free_allocator           = free;
+static mpsc_ring_test_calloc_fn        mpsc_ring_calloc_allocator           = NULL; /* set below */
+static mpsc_ring_test_free_fn          mpsc_ring_free_allocator             = free;
 static int                             mpsc_ring_enqueue_lock_free_override = -1;
 static int                             mpsc_ring_slot_lock_free_override    = -1;
 static mpsc_ring_test_push_hook_fn     mpsc_ring_push_hook                  = NULL;
@@ -72,8 +72,8 @@ void mpsc_ring_test_set_allocators(mpsc_ring_test_aligned_alloc_fn aligned_alloc
 void mpsc_ring_test_reset_allocators(void)
 {
     mpsc_ring_aligned_allocator          = NULL;
-    mpsc_ring_calloc_allocator          = NULL;
-    mpsc_ring_free_allocator            = free;
+    mpsc_ring_calloc_allocator           = NULL;
+    mpsc_ring_free_allocator             = free;
     mpsc_ring_enqueue_lock_free_override = -1;
     mpsc_ring_slot_lock_free_override    = -1;
     mpsc_ring_push_hook                  = NULL;
@@ -101,7 +101,7 @@ static void mpsc_ring_release_owned(void* ptr)
 }
 #else
 #    define mpsc_ring_allocate_owned(size) calloc(1u, (size))
-#    define mpsc_ring_release_owned(ptr) free((ptr))
+#    define mpsc_ring_release_owned(ptr)   free((ptr))
 #endif
 
 #ifndef MPSC_CACHELINE
@@ -132,12 +132,12 @@ typedef struct mpsc_slot
 
 struct mpsc_ring
 {
-    mpsc_slot_t* buf;  /* Circular buffer of slots (read-only after init) */
-    uint64_t     size; /* Ring size, MUST be power of 2 (read-only after init) */
-    uint64_t     mask; /* mask = size - 1 for fast modulo (read-only after init) */
+    mpsc_slot_t* buf;          /* Circular buffer of slots (read-only after init) */
+    uint64_t     size;         /* Ring size, MUST be power of 2 (read-only after init) */
+    uint64_t     mask;         /* mask = size - 1 for fast modulo (read-only after init) */
     int          owns_storage; /* 1 if mpsc_ring_init() malloc'd `storage_base`, 0 for init_into() */
     void*        storage_base; /* the original, possibly-unaligned block passed to init_into (or the
-                                 * library's own malloc'd block) — this, not `this`, is what gets freed */
+                                * library's own malloc'd block) — this, not `this`, is what gets freed */
 
     /* Producers CAS this; the consumer only ever reads it via the slot sequences, never this
      * counter directly, so it needs no companion "consumer's own" field the way SPSCring's
@@ -207,7 +207,7 @@ size_t mpsc_ring_storage_size(uint64_t capacity)
      * safe regardless of `storage`'s own starting alignment. */
     const uint64_t struct_slack = _Alignof(struct mpsc_ring) - 1u;
     const uint64_t slot_slack   = _Alignof(mpsc_slot_t) - 1u;
-    const uint64_t total = (uint64_t)sizeof(struct mpsc_ring) + struct_slack + slot_slack + capacity * (uint64_t)sizeof(mpsc_slot_t);
+    const uint64_t total        = (uint64_t)sizeof(struct mpsc_ring) + struct_slack + slot_slack + capacity * (uint64_t)sizeof(mpsc_slot_t);
 
     if(total > (uint64_t)SIZE_MAX)
     {
@@ -228,9 +228,9 @@ mpsc_ring_t* mpsc_ring_init_into(void* storage, size_t storage_size, uint64_t ca
         return NULL;
     }
 
-    uintptr_t base = (uintptr_t)storage;
-    uintptr_t ring_addr = _align_up((uint64_t)base, (uint64_t)_Alignof(struct mpsc_ring));
-    struct mpsc_ring* ring = (struct mpsc_ring*)(void*)ring_addr;
+    uintptr_t         base      = (uintptr_t)storage;
+    uintptr_t         ring_addr = _align_up((uint64_t)base, (uint64_t) _Alignof(struct mpsc_ring));
+    struct mpsc_ring* ring      = (struct mpsc_ring*)(void*)ring_addr;
 
     memset(ring, 0, sizeof(*ring));
     ring->size         = capacity;
@@ -245,8 +245,8 @@ mpsc_ring_t* mpsc_ring_init_into(void* storage, size_t storage_size, uint64_t ca
         return NULL;
     }
 
-    uintptr_t slots_addr = _align_up((uint64_t)(ring_addr + sizeof(struct mpsc_ring)), (uint64_t)_Alignof(mpsc_slot_t));
-    ring->buf = (mpsc_slot_t*)(void*)slots_addr;
+    uintptr_t slots_addr = _align_up((uint64_t)(ring_addr + sizeof(struct mpsc_ring)), (uint64_t) _Alignof(mpsc_slot_t));
+    ring->buf            = (mpsc_slot_t*)(void*)slots_addr;
 
     if(!_slot_sequence_is_lock_free(&ring->buf[0]))
     {
@@ -293,7 +293,7 @@ int mpsc_ring_push(mpsc_ring_t* ring, void* item)
         return -1;
     }
 
-    uint64_t pos = atomic_load_explicit(&ring->enqueue_pos, memory_order_relaxed);
+    uint64_t     pos = atomic_load_explicit(&ring->enqueue_pos, memory_order_relaxed);
     mpsc_slot_t* slot;
 
 #ifdef MPSC_RING_TESTING
@@ -309,8 +309,8 @@ int mpsc_ring_push(mpsc_ring_t* ring, void* item)
 
     for(;;)
     {
-        slot = &ring->buf[pos & ring->mask];
-        const uint64_t seq = atomic_load_explicit(&slot->sequence, memory_order_acquire);
+        slot                = &ring->buf[pos & ring->mask];
+        const uint64_t seq  = atomic_load_explicit(&slot->sequence, memory_order_acquire);
         /* Unsigned modular difference (see MPSC_SEQ_IS_NEGATIVE): avoids casting to a signed
          * type, which is implementation-defined pre-C23 and, per the API's own "wrap-safe"
          * claim, should never rely on signed overflow behavior at all. */

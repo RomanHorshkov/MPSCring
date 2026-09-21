@@ -69,10 +69,10 @@ static void* _encode(uint32_t producer_id, uint32_t seq)
 /* @return 1 if the bit was ALREADY set (duplicate), 0 if this is the first time. */
 static int _bit_test_and_set(uint64_t index)
 {
-    const uint64_t byte = index / 8u;
-    const uint8_t  mask = (uint8_t)(1u << (index % 8u));
-    const int      was_set = (g_seen[byte] & mask) != 0;
-    g_seen[byte] |= mask;
+    const uint64_t byte     = index / 8u;
+    const uint8_t  mask     = (uint8_t)(1u << (index % 8u));
+    const int      was_set  = (g_seen[byte] & mask) != 0;
+    g_seen[byte]           |= mask;
     return was_set;
 }
 
@@ -102,7 +102,7 @@ int main(void)
         return 1;
     }
 
-    pthread_t producers[N_PRODUCERS];
+    pthread_t      producers[N_PRODUCERS];
     const uint64_t t0 = _now_ns();
 
     for(uint32_t i = 0; i < N_PRODUCERS; ++i)
@@ -119,14 +119,13 @@ int main(void)
         void* item;
         if(mpsc_ring_pop(g_ring, &item) == 0)
         {
-            const uint64_t v             = (uint64_t)(uintptr_t)item;
-            const uint32_t producer_id   = (uint32_t)(v >> 32);
-            const uint32_t seq_plus_one  = (uint32_t)(v & 0xFFFFFFFFu);
+            const uint64_t v            = (uint64_t)(uintptr_t)item;
+            const uint32_t producer_id  = (uint32_t)(v >> 32);
+            const uint32_t seq_plus_one = (uint32_t)(v & 0xFFFFFFFFu);
 
             if(producer_id >= N_PRODUCERS || seq_plus_one == 0u || seq_plus_one > N_PER_PRODUCER)
             {
-                fprintf(stderr, "CORRUPTION: malformed/out-of-range item (producer_id=%u seq+1=%u)\n", producer_id,
-                        seq_plus_one);
+                fprintf(stderr, "CORRUPTION: malformed/out-of-range item (producer_id=%u seq+1=%u)\n", producer_id, seq_plus_one);
                 return 1;
             }
 
