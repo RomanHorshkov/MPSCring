@@ -149,7 +149,9 @@ jobs:
   thread-sanitizer:
     name: ThreadSanitizer (ITs + stress)
     needs: integration-stress
-    runs-on: ubuntu-22.04
+    # build_tsan_tests.sh runs the binaries under `setarch -R` (ASLR off), so the runner's
+    # kernel no longer decides whether TSan can map its shadow memory.
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2

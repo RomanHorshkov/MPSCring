@@ -36,8 +36,18 @@ gcc "${TSAN_CPPFLAGS[@]}" "${TSAN_CFLAGS[@]}" -DN_PER_PRODUCER=2000 \
     app/mpscring.c tests/stress/stress_mt.c \
     -o "${BUILD_DIR}/stress_tsan" "${TSAN_LDFLAGS[@]}" -pthread
 
+# ASLR on recent kernels (mmap randomisation with 28+ bits, Linux 6.x defaults) collides with
+# TSan's fixed shadow-memory layout and aborts with "FATAL: ThreadSanitizer: unexpected memory
+# mapping" before a single test runs — on this laptop and on GitHub's ubuntu runners alike.
+# setarch -R disables ASLR for the child process only (personality(ADDR_NO_RANDOMIZE), no
+# privileges needed), which is the documented TSan workaround; fall through unchanged where
+# setarch is unavailable.
 run_tsan() {
-    timeout --signal=TERM 300 env TSAN_OPTIONS="halt_on_error=1:history_size=7" "$@"
+    local -a no_aslr=()
+    if command -v setarch >/dev/null 2>&1; then
+        no_aslr=(setarch "$(uname -m)" -R)
+    fi
+    timeout --signal=TERM 300 "${no_aslr[@]}" env TSAN_OPTIONS="halt_on_error=1:history_size=7" "$@"
 }
 
 run_tsan "${BUILD_DIR}/it_tsan"
