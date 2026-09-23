@@ -103,7 +103,7 @@ Builds are driven by scripts under `utils/`, mirroring SPSCring's:
   isn't really a correctness claim yet.
 - `utils/build_tsan_tests.sh` separately runs ITs and reduced stress under ThreadSanitizer;
   TSan is never mixed with ASan.
-- `utils/build_deb.sh` builds the release deb + `SHA256SUMS`; `utils/smoke_test_package.sh`
+- `utils/build_deb.sh` builds `libmpscring` (runtime) and `libmpscring-dev` (header, static library) debs + `SHA256SUMS`; `utils/smoke_test_package.sh`
   compiles and runs a tiny program against ONLY the installed package (`/usr/local/include`,
   `/usr/local/lib`), proving the shipped artifact works standalone, not just
   that the source builds; `utils/build_stress.sh` + `utils/run_stress.sh` build and run the
