@@ -137,6 +137,8 @@ MIT, see `LICENSE`.
 ## Build profiles & hardening
 
 Same profile catalog as every sibling library in this workspace — `utils/gcc_build_profiles.sh`
-(synced from `Utils/compilation/`, never edited locally); artifacts land in `build/<profile>/`;
+(a thin wrapper over the pinned `kyr-build` in `build/sysroot/share/kyr-build/`, never a copy); artifacts land in `build/<profile>/`;
 `utils/check_hardening.sh` gates every release artifact. See `SPSCring/README.md` for the
 full profile table (debug/audit/sanitize/release/native/extreme) — identical here.
+
+Build from a clean clone: `./utils/deps.sh sysroot && eval "$(./utils/deps.sh env)" && ./utils/run_pipeline.sh` (no sudo; every pin of `deps.txt` lands in `build/sysroot/`). Diagram: `docs/diagrams/tooling_sequence.puml`.
