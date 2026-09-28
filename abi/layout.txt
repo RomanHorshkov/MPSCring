@@ -1,0 +1,12 @@
+# MPSCring public ABI, written by check_abi.sh --update (kyr-build): a changed line needs a major, a new name a minor.
+major 1
+data_model pointer 8 long 8
+function mpsc_ring_capacity returns uint64_t params 1 (const mpsc_ring_t *)
+function mpsc_ring_destroy returns void params 1 (mpsc_ring_t **)
+function mpsc_ring_init returns mpsc_ring_t * params 1 (uint64_t)
+function mpsc_ring_init_into returns mpsc_ring_t * params 3 (void *, size_t, uint64_t)
+function mpsc_ring_is_empty returns int params 1 (mpsc_ring_t *)
+function mpsc_ring_pop returns int params 2 (mpsc_ring_t *, void **)
+function mpsc_ring_push returns int params 2 (mpsc_ring_t *, void *)
+function mpsc_ring_storage_size returns size_t params 1 (uint64_t)
+constant MPSC_RING_MIN_CAPACITY 2

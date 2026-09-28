@@ -142,3 +142,5 @@ Same profile catalog as every sibling library in this workspace — `utils/gcc_b
 full profile table (debug/audit/sanitize/release/native/extreme) — identical here.
 
 Build from a clean clone: `./utils/deps.sh sysroot && eval "$(./utils/deps.sh env)" && ./utils/run_pipeline.sh` (no sudo; every pin of `deps.txt` lands in `build/sysroot/`). Diagram: `docs/diagrams/tooling_sequence.puml`.
+
+ABI: `abi/layout.txt` is the committed public ABI of `app/mpscring.h` (layouts, enumerator values, callbacks, function signatures, numeric constants), checked by kyr-build's gate through `utils/check_abi.sh` (pipeline stages `abi` and `abi-exports`): a changed line needs a raised major, a new public name a raised minor, and `libmpscring.so` exports exactly the declared functions as `<name>@@MPSCRING_<major>` (`utils/mpscring.map`); `utils/mpscring_project.sh` says what is public. Debs through kyr-build's `lib/deb.sh` (`X-Kyr-Tier`, byte-reproducible). Diagram: `docs/diagrams/abi_exports.puml`.

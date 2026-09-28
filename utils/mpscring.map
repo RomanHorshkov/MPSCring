@@ -1,26 +1,16 @@
-# MPSCring — which functions libmpscring.so exposes to the outside
-#
-# This file is given to the linker when libmpscring.so is built
-# (-Wl,--version-script). It is a plain allowlist:
-#
-#   global:  names a consumer program may call or link against
-#   local:   everything else — still inside the library, still used
-#            internally, but invisible from outside
-#
-# Without this file the linker exports EVERY non-static function in every .c
-# file, so internal helpers become part of the library's public interface by
-# accident. With it, the public interface is exactly the list below.
-#
-# It only affects the .so. The .a archive is a bag of object files with no
-# notion of "exported", so it is unchanged.
-#
-# Rule: a function is public when it is declared in the public header AND
-# matches a line under global:. Forgetting the second half is caught at link
-# time (the consumer's link fails with "undefined reference"), never at run
-# time.
-{
+# mpscring.map — the functions libmpscring.so exports, under the version node MPSCRING_<major> (the soname major): exactly the
+# functions app/mpscring.h declares (the `function` lines of abi/layout.txt; utils/check_abi.sh --exports refuses any difference).
+# Everything else stays local. The .a archive is unaffected.
+MPSCRING_1 {
   global:
-    mpsc_ring_*;
+    mpsc_ring_capacity;
+    mpsc_ring_destroy;
+    mpsc_ring_init;
+    mpsc_ring_init_into;
+    mpsc_ring_is_empty;
+    mpsc_ring_pop;
+    mpsc_ring_push;
+    mpsc_ring_storage_size;
   local:
     *;
 };
