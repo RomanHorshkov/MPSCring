@@ -75,7 +75,7 @@ check on GCC/Clang.
 
 ## Build system
 
-Builds are driven by scripts under `utils/`, mirroring SPSCring's:
+`utils/` holds the pinned kyr-build's wrappers and `utils/mpscring_project.sh`, which declares the library, the suites (test seams `-DMPSC_RING_TESTING` in the coverage and sanitizer runs only), the gates and the debs:
 
 - `utils/build_libs.sh [profile …]` builds the static and shared libraries per profile into
   `build/<profile>/` (release gated by `check_hardening.sh`).
@@ -104,12 +104,12 @@ Builds are driven by scripts under `utils/`, mirroring SPSCring's:
 - `utils/build_tsan_tests.sh` separately runs ITs and reduced stress under ThreadSanitizer;
   TSan is never mixed with ASan.
 - `utils/build_deb.sh` builds `libmpscring` (runtime) and `libmpscring-dev` (header, static library) debs + `SHA256SUMS`; `utils/smoke_test_package.sh`
-  compiles and runs a tiny program against ONLY the installed package (`/usr/local/include`,
+  compiles and runs `tests/package/smoke.c` against ONLY the installed package (`/usr/local/include`,
   `/usr/local/lib`), proving the shipped artifact works standalone, not just
   that the source builds; `utils/build_stress.sh` + `utils/run_stress.sh` build and run the
-  stress test (results under `tests/results/stress/`); `utils/run_pipeline.sh` runs build,
-  release UTs, atomic-counter coverage, ITs, sanitizers, stress, optional local TSan, and
-  packaging.
+  stress test (results under `tests/results/stress/`); `utils/run_pipeline.sh` runs deps and
+  tiers, template, ABI, every profile, release UTs, atomic-counter coverage, ITs, sanitizers,
+  stress, optional local TSan, packaging and the smoke test against the built debs.
 
 ## Continuous integration
 
