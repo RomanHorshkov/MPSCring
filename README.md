@@ -109,7 +109,8 @@ check on GCC/Clang.
   that the source builds; `utils/build_stress.sh` + `utils/run_stress.sh` build and run the
   stress test (results under `tests/results/stress/`); `utils/run_pipeline.sh` runs deps and
   tiers, template, ABI, every profile, release UTs, atomic-counter coverage, ITs, sanitizers,
-  stress, optional local TSan, packaging and the smoke test against the built debs.
+  stress, optional local TSan, packaging, the smoke test against the built debs and the
+  legacy-names check (`utils/check_legacy_names.sh`, kyr-build 3.0.0's stage, copied until it is pinned).
 
 ## Continuous integration
 
@@ -144,3 +145,5 @@ full profile table (debug/audit/sanitize/release/native/extreme) — identical h
 Build from a clean clone: `./utils/deps.sh sysroot && eval "$(./utils/deps.sh env)" && ./utils/run_pipeline.sh` (no sudo; every pin of `deps.txt` lands in `build/sysroot/`). Diagram: `docs/diagrams/tooling_sequence.puml`.
 
 ABI: `abi/layout.txt` is the committed public ABI of `app/mpscring.h` (layouts, enumerator values, callbacks, function signatures, numeric constants), checked by kyr-build's gate through `utils/check_abi.sh` (pipeline stages `abi` and `abi-exports`): a changed line needs a raised major, a new public name a raised minor, and `libmpscring.so` exports exactly the declared functions as `<name>@@MPSCRING_<major>` (`utils/mpscring.map`); `utils/mpscring_project.sh` says what is public. Debs through kyr-build's `lib/deb.sh` (`X-Kyr-Tier`, byte-reproducible). Diagram: `docs/diagrams/abi_exports.puml`.
+
+History: 1.0.9 names kyr_core's write queue as the header's example consumer and runs the legacy-names check.
