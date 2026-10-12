@@ -29,7 +29,7 @@
  * - MANY producer threads, exactly ONE consumer thread.
  * - Capacity must be a power of two and at least `MPSC_RING_MIN_CAPACITY` (2).
  * - Elements stored are `void*` (opaque to this library — it carries pointers, it does not
- *   know or care what they point to; the DB_app write-queue that consumes this library
+ *   know or care what they point to; kyr_core's write queue, which consumes this library,
  *   stores pointers to caller-owned job structs, for example, but this library has zero
  *   knowledge of "jobs" or "transactions").
  * - Indices are 64-bit and wrap-safe when used through this API.
