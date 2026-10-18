@@ -110,7 +110,8 @@ check on GCC/Clang.
   stress test (results under `tests/results/stress/`); `utils/run_pipeline.sh` runs deps and
   tiers, template, ABI, every profile, release UTs, atomic-counter coverage, ITs, sanitizers,
   stress, optional local TSan, packaging, the smoke test against the built debs and the
-  legacy-names check (`utils/check_legacy_names.sh`, kyr-build 3.0.0's stage, copied until it is pinned).
+  legacy-names, pragmas, tables and warnings gates of the pinned kyr-build (3.1.1: every profile under the whole warning set
+  and `-Werror`, the tests included).
 
 ## Continuous integration
 
