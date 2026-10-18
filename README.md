@@ -147,4 +147,4 @@ Build from a clean clone: `./utils/deps.sh sysroot && eval "$(./utils/deps.sh en
 
 ABI: `abi/layout.txt` is the committed public ABI of `app/mpscring.h` (layouts, enumerator values, callbacks, function signatures, numeric constants), checked by kyr-build's gate through `utils/check_abi.sh` (pipeline stages `abi` and `abi-exports`): a changed line needs a raised major, a new public name a raised minor, and `libmpscring.so` exports exactly the declared functions as `<name>@@MPSCRING_<major>` (`utils/mpscring.map`); `utils/mpscring_project.sh` says what is public. Debs through kyr-build's `lib/deb.sh` (`X-Kyr-Tier`, byte-reproducible). Diagram: `docs/diagrams/abi_exports.puml`.
 
-History: 1.0.9 names kyr_core's write queue as the header's example consumer and runs the legacy-names check.
+History: 1.0.10 builds under kyr-build 3.1.1, zero warnings under the whole set in every profile, the tests included (library unchanged); 1.0.9 names kyr_core's write queue as the header's example consumer and runs the legacy-names check.
