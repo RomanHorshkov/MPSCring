@@ -20,6 +20,7 @@
  */
 #include <assert.h>
 #include <pthread.h>
+#include <sched.h>
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -86,8 +87,9 @@ static void* producer_main(void* arg)
         atomic_fetch_add_explicit(&g_produced_sum, val, memory_order_relaxed);
         while(mpsc_ring_push(g_ring, item) != 0)
         {
-            /* ring momentarily full: the consumer is a single thread and this is a stress
-             * test by design, so producers legitimately spin-wait here. */
+            /* ring momentarily full: the consumer is a single thread, so producers wait here; they yield, or sixteen spinning
+             * producers starve that consumer of a core (under TSan 32,000 items took 268 s of the stage's 300). */
+            sched_yield();
         }
     }
     return NULL;
