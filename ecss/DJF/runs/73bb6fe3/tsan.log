@@ -1,0 +1,22 @@
+CC app/mpscring.c
+CC tests/ITs/integration_tests.c
+LD $ROOT/build/tsan/it/it
+CC tests/stress/stress_mt.c
+LD $ROOT/build/tsan/stress/stress
+RUN build/tsan/it/it
+[==========] mpscring_its: Running 3 test(s).
+[ RUN      ] test_simple_flow
+[       OK ] test_simple_flow
+[ RUN      ] test_storage_size_round_trip
+[       OK ] test_storage_size_round_trip
+[ RUN      ] test_concurrent_multi_producer_flow
+[       OK ] test_concurrent_multi_producer_flow
+[==========] mpscring_its: 3 test(s) run.
+[  PASSED  ] 3 test(s).
+RUN build/tsan/stress/stress
+MPSCring stress: 16 producers x 2000 items = 32000 total
+  consumed_count=32000 (expected 32000)
+  produced_sum=1030792183056000 consumed_sum=1030792183056000 (match: yes)
+  elapsed=93.564s  throughput=342 ops/s
+
+STRESS TEST PASSED (exactly-once proven via per-item bitmap, not just count/sum)

@@ -1,0 +1,34 @@
+@startuml
+' MPSCRING-DOC-SDD, figure 4-1: the components of app/mpscring.c and the customer around them (kyr_core 5.0.0's write queue)
+title MPSCring 1.0.10: components
+skinparam componentStyle rectangle
+skinparam shadowing false
+package "kyr_core 5.0.0: the write queue (the customer)" {
+  [request threads\nkyr_core_txn_queue_submit()\n(kyr_drive, kyr_estate, kyr_rms writes)] as S
+  [the environment's writer thread\n_writer_main()] as WR
+}
+package "libmpscring (app/mpscring.c)" {
+  [CMP-PRODUCER\npush: claim, publish] as PROD
+  [CMP-CONSUMER\npop, is_empty] as CONS
+  [CMP-STORAGE\nstorage_size, init_into] as STO
+  [CMP-LIFE\ninit, destroy] as LIFE
+  [CMP-QUERY\ncapacity] as Q
+  [CMP-STATE\nstruct mpsc_ring: buf, size, mask,\nowns_storage, storage_base\nenqueue_pos (own line) | dequeue_pos (own line)\nslots: sequence + data] as ST
+  [CMP-SEAMS\ntests only:\nMPSC_RING_TESTING] as SEAMS #lightgrey
+}
+interface "mpscring.h" as H
+S --> H : mpsc_ring_push(ring, job)\n(any number at once)
+WR --> H : mpsc_ring_is_empty / mpsc_ring_pop\n(the one consumer)
+WR --> H : mpsc_ring_init / destroy\n(start, stop)
+H --> PROD
+H --> CONS
+H --> STO
+H --> LIFE
+H --> Q
+PROD --> ST : CAS enqueue_pos\nslot: acquire seq, store data,\nrelease seq = pos + 1
+CONS --> ST : dequeue_pos (plain)\nslot: acquire seq, read data,\nrelease seq = pos + size
+STO --> ST : places the block and the slots\nin the storage; probes lock-free
+LIFE --> STO : calloc(storage_size) then init_into
+SEAMS ..> PROD : push hook, stolen position
+SEAMS ..> LIFE : the allocator, the lock-free verdicts
+@enduml

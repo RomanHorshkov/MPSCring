@@ -1,0 +1,40 @@
+deb.sh: host build (KYR_ALLOW_HOST_BUILD=1): development debs, Build-Root: none
+CC app/mpscring.c
+AR $ROOT/build/release/libmpscring.a
+LD $ROOT/build/release/libmpscring.so.1.0.10
+CHECK $ROOT/build/release/libmpscring.so.1.0.10 $ROOT/build/release/libmpscring.a
+$ROOT/build/release/libmpscring.so.1.0.10  [lib]
+  ✓ non-executable stack
+  ✓ GNU_RELRO segment present
+  ✓ immediate binding (full RELRO)
+  ✓ no TEXTREL
+  ✓ no RPATH/RUNPATH
+  ✓ symbol versions within GLIBC_2.39 GLIBCXX_3.4.33 CXXABI_1.3.15 GCC_14.0.0
+  ✓ every DT_NEEDED on the allowlist
+  ✓ versioned SONAME libmpscring.so.1
+  ✓ no build-host path strings
+  ! not stripped (.symtab present) — expected before build_deb's strip, unexpected in a staged deb payload (WARN)
+  ! no __stack_chk_fail reference — no protected frames (fine for tiny libs) or missing -fstack-protector-strong (WARN)
+  ! no __*_chk symbols — all checked calls proven safe, no fortifiable calls, or missing -D_FORTIFY_SOURCE (WARN)
+
+$ROOT/build/release/libmpscring.a  [archive]
+  ✓ all 1 member object(s) position-independent
+
+check_hardening: all hard checks passed (2 file(s))
+$ROOT/build/pkgroot/libmpscring/usr/local/lib/libmpscring.so.1.0.10  [lib]
+  ✓ non-executable stack
+  ✓ GNU_RELRO segment present
+  ✓ immediate binding (full RELRO)
+  ✓ no TEXTREL
+  ✓ no RPATH/RUNPATH
+  ✓ symbol versions within GLIBC_2.39 GLIBCXX_3.4.33 CXXABI_1.3.15 GCC_14.0.0
+  ✓ every DT_NEEDED on the allowlist
+  ✓ versioned SONAME libmpscring.so.1
+  ✓ no build-host path strings
+  ✓ stripped
+  ! no __stack_chk_fail reference — no protected frames (fine for tiny libs) or missing -fstack-protector-strong (WARN)
+  ! no __*_chk symbols — all checked calls proven safe, no fortifiable calls, or missing -D_FORTIFY_SOURCE (WARN)
+
+check_hardening: all hard checks passed (1 file(s))
+09784de33e291b74b8bd05bec5e90eacecc4d0e491d2026b1ef23162be8d5a79  libmpscring-dev_1.0.10_amd64.deb
+106ded0b765c1c3e08141834a07e41a1b1378c9e878df9eb0e554febef709a48  libmpscring_1.0.10_amd64.deb

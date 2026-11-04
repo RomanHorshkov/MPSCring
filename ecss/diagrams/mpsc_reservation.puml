@@ -1,0 +1,35 @@
+@startuml
+' MPSCRING-DOC-SDD, figure 5-3: the reservation (claim) and the publish, two producers racing, and a producer stalled inside its window
+title MPSCring: the claim, the publish, and the waiting consumer
+participant "producer A" as A
+participant "producer B" as B
+participant "enqueue_pos\n(_Atomic, own line)" as E
+participant "slot p\nsequence, data" as SP
+participant "slot p+1\nsequence, data" as SQ
+participant "consumer\n(dequeue_pos == p)" as C
+== two producers race for position p ==
+A -> E : pos = load(relaxed) = p
+B -> E : pos = load(relaxed) = p
+A -> SP : load(sequence, acquire) == p: free
+B -> SP : load(sequence, acquire) == p: free
+A -> E : CAS(p -> p + 1, relaxed): won
+B -> E : CAS(p -> p + 1, relaxed): lost, pos = p + 1
+B -> SQ : load(sequence, acquire) == p + 1: free
+B -> E : CAS(p + 1 -> p + 2): won
+B -> SQ : data = job B; store(sequence, p + 2, release)
+== A is preempted between its claim and its publish ==
+C -> SP : load(sequence, acquire) == p, not p + 1
+C --> C : empty: pop returns -1\n(job B waits behind position p)
+note over C
+  kyr_core's writer sleeps on its condition;
+  B's signal finds the ring empty again
+end note
+A -> SP : data = job A; store(sequence, p + 1, release)
+A -> C : (kyr_core) signal the writer
+C -> SP : load(sequence, acquire) == p + 1: take job A,\nstore(sequence, p + N, release)
+C -> SQ : load(sequence, acquire) == p + 2: take job B
+note over A, C
+  nothing lost, nothing read early: the window holds back delivery only
+  (MPSCRING-SRS-013); the ring is not formally lock-free
+end note
+@enduml

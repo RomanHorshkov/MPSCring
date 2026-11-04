@@ -1,0 +1,16 @@
+@startuml
+' MPSCRING-DOC-SDD, figure 5-1: one slot's sequence through one lap, for the position pos it serves (N = capacity, slot = pos & (N - 1))
+title MPSCring: a slot's sequence (Vyukov's protocol)
+hide empty description
+[*] --> Free : init: sequence = slot index\n(the first lap's pos)
+state "Free for pos\nsequence == pos" as Free
+state "Claimed by one producer\nsequence == pos\nenqueue_pos > pos" as Claimed
+state "Published for pos\nsequence == pos + 1" as Published
+state "Read, free for pos + N\nsequence == pos + N" as Freed
+Free --> Claimed : a producer sees pos == sequence\nand wins CAS enqueue_pos pos -> pos + 1
+Claimed --> Published : the producer stores data,\nrelease store sequence = pos + 1
+Published --> Freed : the consumer at dequeue_pos == pos:\nacquire sequence, read data,\nrelease store sequence = pos + N
+Freed --> Free : the next lap: this slot serves pos + N
+Published --> Published : a producer for pos + N sees sequence < pos + N:\nfull, push returns -1 (the slot is not read yet)
+Claimed --> Claimed : the consumer at pos sees sequence < pos + 1:\nempty, pop returns -1\n(a stalled producer holds every later position)
+@enduml

@@ -1,0 +1,12 @@
+
+[release/static/stress_mt]
+MPSCring stress: 16 producers x 500000 items = 8000000 total
+  consumed_count=8000000 (expected 8000000)
+  produced_sum=257700037764000000 consumed_sum=257700037764000000 (match: yes)
+  elapsed=5.583s  throughput=1432946 ops/s
+
+STRESS TEST PASSED (exactly-once proven via per-item bitmap, not just count/sum)
+
+[stress summary] $ROOT/tests/results/stress/stress_summary.tsv
+# status  profile  linkage  benchmark  mean_cost  mean_rate  result
+PASS      release  static   stress_mt  NA         NA         tests/results/stress/release/static/stress_mt_result.txt

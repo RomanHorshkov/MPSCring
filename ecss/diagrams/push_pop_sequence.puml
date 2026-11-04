@@ -1,0 +1,25 @@
+@startuml
+' MPSCRING-DOC-SDD, figure 5-2: one hand-off and the happens-before that makes it safe (ISO/IEC 9899:2011 7.17)
+title MPSCring: push and pop, with their memory orders
+participant "producer\n(a request thread)" as P
+participant "enqueue_pos" as E
+participant "slot[pos & mask]\nsequence" as Q
+participant "slot[pos & mask]\ndata" as D
+participant "consumer\n(the writer thread)" as C
+== mpsc_ring_push(ring, job) ==
+P -> E : pos = load(enqueue_pos, relaxed)
+P -> Q : seq = load(sequence, acquire)
+note right of Q : pairs with the consumer's release\nof the previous lap: the slot was\nread before it is reused
+P -> E : seq == pos: CAS(pos -> pos + 1, relaxed)\n(ownership only)
+P -> D : data = job (plain store)
+P -> Q : store(sequence, pos + 1, release)
+note left of Q : publishes the job and everything\nthe submitter wrote before the push
+== mpsc_ring_pop(ring, &job) ==
+C -> C : pos = dequeue_pos (plain: the one consumer owns it)
+C -> Q : seq = load(sequence, acquire)
+note right of Q : synchronizes-with the producer's release:\ndata holds the job, the job its contents
+C -> D : seq == pos + 1: job = data (plain load)
+C -> C : dequeue_pos = pos + 1
+C -> Q : store(sequence, pos + size, release)
+note right of Q : frees the slot for the next lap
+@enduml

@@ -1,0 +1,12 @@
+case,profile,status,summary,evidence
+MPSCRING-VC-001,release,passed,9 tests passed,runs/73bb6fe3/unit-tests-release.log
+MPSCRING-VC-002,coverage,passed,"15 tests passed (12 unit, 3 integration) · lines 100.0 % · branches 100.0 %",runs/73bb6fe3/coverage-summary.json
+MPSCRING-VC-003,release,passed,3 tests passed,runs/73bb6fe3/integration.log
+MPSCRING-VC-004,sanitize,passed,"15 tests passed (12 unit, 3 integration) and the stress of 16 x 50000 values, no sanitizer report",runs/73bb6fe3/sanitizers.log
+MPSCRING-VC-005,tsan,passed,"3 tests passed and the stress of 16 x 2000 values (93.564 s, 342 values/s), no race reported",runs/73bb6fe3/tsan.log
+MPSCRING-VC-006,release,passed,"16 x 500000 = 8000000 values exactly once in 5.583 s, 1432946 values/s",runs/73bb6fe3/stress-run.log
+MPSCRING-VC-007,release,passed,"abi and abi-exports passed: the 8 declared functions, all @@MPSCRING_1",runs/73bb6fe3/abi-exports.log
+MPSCRING-VC-008,release,passed,smoke test passed against the installed packages,runs/73bb6fe3/package-smoke.log
+MPSCRING-VC-009,release,passed,"check_hardening passed on the release artifacts, 20 ELF(s) within the glibc ceiling",runs/73bb6fe3/glibc-ceiling.log
+MPSCRING-VC-010,audit,passed,"the audit build (-fanalyzer, -Werror) and the gates legacy-names, pragmas, tables and warnings passed: no warning in 24 logs",runs/73bb6fe3/warnings.log
+MPSCRING-VC-011,inspection,passed,"inspection held: 12 of 12 checks",runs/73bb6fe3/inspection.md
