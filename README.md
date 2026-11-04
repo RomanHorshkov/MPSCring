@@ -10,7 +10,11 @@ Multi-Producer Single-Consumer (MPSC) ring buffer implemented in C11 with mutex-
 semantics for many producer threads and exactly one consumer thread. NOT formally lock-free
 (see "Implementation choices" below) — a fast, CAS-based, mutex-free design, but Vyukov's own
 description of the underlying algorithm is explicit that a stalled producer can block the
-consumer's progress. The data type is `void*` (opaque to this library) — sibling to
+consumer's progress (`test_stalled_producer_holds_back_the_consumer` in `tests/UTs/unit_tests.c`
+shows it and its bound: with a producer held between its claim and its publish, the consumer
+sees nothing past its slot, the other producers fill every other slot and finish, and the next
+push is refused as full, it never waits; once it publishes, everything is delivered once, in
+claim order). The data type is `void*` (opaque to this library) — sibling to
 [SPSCring](https://github.com/RomanHorshkov/SPSCring) (which is single-producer, `int`-typed,
 and intended for socket file descriptors); this one exists for the case where many threads
 need to hand work to one dedicated consumer thread concurrently, e.g. many request-handling
@@ -75,7 +79,7 @@ check on GCC/Clang.
 
 ## Build system
 
-`utils/` holds the pinned kyr-build's wrappers and `utils/mpscring_project.sh`, which declares the library, the suites (test seams `-DMPSC_RING_TESTING` in the coverage and sanitizer runs only), the gates and the debs:
+`utils/` holds the pinned kyr-build's wrappers and `utils/mpscring_project.sh`, which declares the library, the suites (test seams `-DMPSC_RING_TESTING` in the coverage, sanitizer and ThreadSanitizer runs only), the gates and the debs:
 
 - `utils/build_libs.sh [profile …]` builds the static and shared libraries per profile into
   `build/<profile>/` (release gated by `check_hardening.sh`).
@@ -101,8 +105,9 @@ check on GCC/Clang.
   (TSan's instrumentation overhead makes the full-size run impractically slow, not incorrect)
   — a correctness claim about concurrent code that hasn't been run under TSan at least once
   isn't really a correctness claim yet.
-- `utils/build_tsan_tests.sh` separately runs ITs and reduced stress under ThreadSanitizer;
-  TSan is never mixed with ASan.
+- `utils/build_tsan_tests.sh` separately runs UTs (their stalled-producer test is four threads
+  through the claim window), ITs and reduced stress under ThreadSanitizer; TSan is never mixed
+  with ASan.
 - `utils/build_deb.sh` builds `libmpscring` (runtime) and `libmpscring-dev` (header, static library) debs + `SHA256SUMS`; `utils/smoke_test_package.sh`
   compiles and runs `tests/package/smoke.c` against ONLY the installed package (`/usr/local/include`,
   `/usr/local/lib`), proving the shipped artifact works standalone, not just

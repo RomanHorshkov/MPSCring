@@ -22,6 +22,10 @@
  * entirely on that path (matching SPSCring's own unit_tests.c convention exactly), or the
  * release-profile unit test binary fails to link. */
 #ifdef MPSC_RING_TESTING
+#    include <pthread.h>
+#    include <stdint.h>
+#    include <time.h>
+
 #    include "mpscring_test_hooks.h"
 
 static int g_calloc_fail_after = -1; /* -1 = never fail */
@@ -325,6 +329,157 @@ static void test_push_retries_when_enqueue_pos_races_underneath(void)
     mpsc_ring_destroy(&r);
     printf("test_push_retries_when_enqueue_pos_races_underneath: PASS\n");
 }
+
+/* ---- A producer stalled between its claim and its publish ---------------------------------------------------------------
+ * The header's "NOT formally lock-free" paragraph, shown rather than written: one producer claims position 0 and stops inside
+ * the window (the claim hook blocks it on a condition variable); three other producers claim and publish every other slot and
+ * finish; the consumer sees nothing past the stalled slot however often it asks; the next push is refused at once (full), it
+ * neither waits nor overwrites; once the stalled producer publishes, every item comes out exactly once, in the order the
+ * positions were claimed; the ring goes on. Items are 1-based indices carried as pointers. */
+#    define STALL_CAPACITY     16u
+#    define STALL_PRODUCERS    3u
+#    define STALL_PER_PRODUCER 5u                                          /* 3 x 5 = 15: every slot but the stalled one */
+#    define STALL_ITEMS        (1u + STALL_PRODUCERS * STALL_PER_PRODUCER) /* item 0 is the stalled producer's */
+#    define STALL_POLLS        10000u
+#    define STALL_ITEM(id)     ((void*)(uintptr_t)((id) + 1u))
+#    define STALL_ID(item)     ((size_t)((uintptr_t)(item) - 1u))
+
+_Static_assert(STALL_ITEMS == STALL_CAPACITY, "the free producers fill every slot but the stalled one");
+
+static mpsc_ring_t*    g_stall_ring;
+static uint64_t        g_stall_claimed_at[STALL_ITEMS + 1u]; /* each item's position, written in the hook by its producer */
+static pthread_mutex_t g_stall_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t  g_stall_cond = PTHREAD_COND_INITIALIZER;
+static int             g_stall_holding;                      /* item 0's producer is inside the window */
+static int             g_stall_go;                           /* the test lets it publish */
+
+static void _stall_claim_hook(uint64_t pos, void* item)
+{
+    const size_t id = STALL_ID(item);
+    assert(id <= STALL_ITEMS);
+    g_stall_claimed_at[id] = pos;
+    if(id != 0u)
+    {
+        return;
+    }
+    pthread_mutex_lock(&g_stall_lock);
+    g_stall_holding = 1;
+    pthread_cond_broadcast(&g_stall_cond);
+    while(!g_stall_go)
+    {
+        pthread_cond_wait(&g_stall_cond, &g_stall_lock);
+    }
+    pthread_mutex_unlock(&g_stall_lock);
+}
+
+static void* _stalled_producer(void* arg)
+{
+    (void)arg;
+    return mpsc_ring_push(g_stall_ring, STALL_ITEM(0u)) == 0 ? NULL : arg;
+}
+
+static void* _free_producer(void* arg)
+{
+    const size_t p = (size_t)(uintptr_t)arg;
+    for(size_t k = 0u; k < STALL_PER_PRODUCER; ++k)
+    {
+        if(mpsc_ring_push(g_stall_ring, STALL_ITEM(1u + p * STALL_PER_PRODUCER + k)) != 0)
+        {
+            return STALL_ITEM(p);
+        }
+    }
+    return NULL;
+}
+
+static void test_stalled_producer_holds_back_the_consumer(void)
+{
+    g_stall_ring = mpsc_ring_init(STALL_CAPACITY);
+    assert(g_stall_ring != NULL);
+    mpsc_ring_test_set_claim_hook(_stall_claim_hook);
+
+    /* One producer claims position 0 and stops between its claim and its publish. */
+    pthread_t stalled;
+    assert(pthread_create(&stalled, NULL, _stalled_producer, NULL) == 0);
+    pthread_mutex_lock(&g_stall_lock);
+    while(!g_stall_holding)
+    {
+        pthread_cond_wait(&g_stall_cond, &g_stall_lock);
+    }
+    pthread_mutex_unlock(&g_stall_lock);
+    assert(g_stall_claimed_at[0] == 0u);
+
+    /* The other producers are not held: they claim and publish the 15 other slots and finish. */
+    pthread_t free_producers[STALL_PRODUCERS];
+    for(size_t p = 0u; p < STALL_PRODUCERS; ++p)
+    {
+        assert(pthread_create(&free_producers[p], NULL, _free_producer, (void*)(uintptr_t)p) == 0);
+    }
+    for(size_t p = 0u; p < STALL_PRODUCERS; ++p)
+    {
+        void* failed = STALL_ITEM(p);
+        assert(pthread_join(free_producers[p], &failed) == 0);
+        assert(failed == NULL);
+    }
+
+    /* The bound: the ring is full behind the stalled slot, and the next push is refused at once; it neither waits nor overwrites. */
+    assert(mpsc_ring_push(g_stall_ring, STALL_ITEM(STALL_ITEMS)) == -1);
+
+    /* The consumer sees nothing past the stalled slot, though 15 items are published behind it, however often and long it asks. */
+    const struct timespec pause = {.tv_sec = 0, .tv_nsec = 1000000L};
+    for(unsigned i = 0u; i < STALL_POLLS; ++i)
+    {
+        void* out = NULL;
+        assert(mpsc_ring_pop(g_stall_ring, &out) == -1);
+        assert(out == NULL);
+        assert(mpsc_ring_is_empty(g_stall_ring) == 1);
+        if(i % 1000u == 0u)
+        {
+            assert(nanosleep(&pause, NULL) == 0);
+        }
+    }
+
+    /* The stalled producer publishes: its push succeeds, and every item comes out once, in the order the positions were claimed. */
+    pthread_mutex_lock(&g_stall_lock);
+    g_stall_go = 1;
+    pthread_cond_broadcast(&g_stall_cond);
+    pthread_mutex_unlock(&g_stall_lock);
+    void* stalled_failed = STALL_ITEM(0u);
+    assert(pthread_join(stalled, &stalled_failed) == 0);
+    assert(stalled_failed == NULL);
+    mpsc_ring_test_set_claim_hook(NULL);
+
+    unsigned delivered[STALL_ITEMS] = {0};
+    for(uint64_t pos = 0u; pos < STALL_ITEMS; ++pos)
+    {
+        void* out = NULL;
+        assert(mpsc_ring_pop(g_stall_ring, &out) == 0);
+        const size_t id = STALL_ID(out);
+        assert(id < STALL_ITEMS);
+        assert(g_stall_claimed_at[id] == pos);
+        delivered[id]++;
+    }
+    for(size_t id = 0u; id < STALL_ITEMS; ++id)
+    {
+        assert(delivered[id] == 1u);
+    }
+    assert(mpsc_ring_pop(g_stall_ring, NULL) == -1);
+    assert(mpsc_ring_is_empty(g_stall_ring) == 1);
+
+    /* And the ring goes on: a whole lap more, in order. */
+    for(size_t id = 0u; id < STALL_CAPACITY; ++id)
+    {
+        assert(mpsc_ring_push(g_stall_ring, STALL_ITEM(id)) == 0);
+    }
+    for(size_t id = 0u; id < STALL_CAPACITY; ++id)
+    {
+        void* out = NULL;
+        assert(mpsc_ring_pop(g_stall_ring, &out) == 0);
+        assert(out == STALL_ITEM(id));
+    }
+
+    mpsc_ring_destroy(&g_stall_ring);
+    printf("test_stalled_producer_holds_back_the_consumer: PASS\n");
+}
 #endif /* MPSC_RING_TESTING */
 
 int main(void)
@@ -342,6 +497,7 @@ int main(void)
     test_allocation_failure_path();
     test_lock_free_rejection();
     test_push_retries_when_enqueue_pos_races_underneath();
+    test_stalled_producer_holds_back_the_consumer();
 #endif
 
     printf("\nALL UNIT TESTS PASSED\n");

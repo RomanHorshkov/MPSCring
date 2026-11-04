@@ -8,8 +8,10 @@ KYR_LIB_HEADER="app/mpscring.h"
 KYR_LIB_MAP="utils/mpscring.map"
 KYR_LIB_CPPFLAGS=(-I"${ROOT_DIR}/app" -DMPSC_REQUIRE_ALWAYS_LOCK_FREE)
 KYR_LIB_LDLIBS=()
-# The test-only allocation and lock-free seams, in the coverage and sanitizer runs only, never in a shipped library.
+# The test-only allocation, lock-free and claim-window seams, in the coverage, sanitizer and ThreadSanitizer runs only, never in a
+# shipped library.
 KYR_TEST_HOOKS_CPPFLAGS=(-DMPSC_RING_TESTING -I"${ROOT_DIR}/tests/UTs")
+KYR_TEST_HOOKS_RUNS=(coverage sanitize tsan)
 
 KYR_UT_SUITES=(ut)
 KYR_SUITE_UT_SOURCES=('tests/UTs/*.c')
@@ -34,7 +36,8 @@ KYR_SUITE_STRESS_CPPFLAGS_SANITIZE=(-DN_PER_PRODUCER=50000u)
 KYR_SUITE_STRESS_CPPFLAGS_TSAN=(-DN_PER_PRODUCER=2000u)
 KYR_SUITE_STRESS_LDLIBS=(-pthread)
 KYR_SANITIZE_SUITES=(ut it stress)
-KYR_TSAN_SUITES=(it stress)
+# The unit suite too: its stalled-producer test runs four threads through the claim window.
+KYR_TSAN_SUITES=(ut it stress)
 GCC_BUILD_ENABLE_TSAN=1 # the catalog, sourced first, sets 0 when unset: the tsan stage runs in every pipeline
 
 # libmpscring and libmpscring-dev, both replacing the former single package "mpscring".

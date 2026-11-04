@@ -21,7 +21,11 @@
  * under an adversarial scheduler. In practice the claim-to-publish window is a few
  * instructions (no syscalls, no allocation), so this is not a concern under normal
  * scheduling — but a producer that dies or is suspended for a long time inside that window
- * can wedge the ring for the consumer. Callers with a hard liveness requirement (must never
+ * can wedge the ring for the consumer. tests/UTs/unit_tests.c's
+ * test_stalled_producer_holds_back_the_consumer holds a producer there: the consumer sees
+ * nothing past its slot, the other producers fill every other slot and finish, the next push
+ * is refused as full (it never waits); once it publishes, everything is delivered once, in
+ * claim order. Callers with a hard liveness requirement (must never
  * stall regardless of producer misbehavior) need a different algorithm; callers accepting
  * "fast in practice, blocking under producer suspension" should use this as intended.
  *
