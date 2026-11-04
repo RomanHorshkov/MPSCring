@@ -11,6 +11,7 @@
 #define MPSC_RING_TEST_HOOKS_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include "mpscring.h" /* mpsc_ring_t, for mpsc_ring_test_steal_enqueue_pos() below */
 
@@ -56,5 +57,17 @@ void mpsc_ring_test_set_push_hook(mpsc_ring_test_push_hook_fn hook);
  * reusing it.
  */
 void mpsc_ring_test_steal_enqueue_pos(mpsc_ring_t* ring);
+
+/**
+ * @brief Fire synchronously inside mpsc_ring_push() the moment its claim CAS has won position `pos` for `item`, before the
+ *  slot's data store and the release-store that publishes it — on every push while set (not single-shot).
+ *
+ * This is the window the header's "NOT formally lock-free" paragraph is about: a hook that blocks holds one producer exactly
+ * there, with its position claimed and its slot unpublished, so a test can show what the consumer and the other producers see
+ * meanwhile, and what is delivered once it publishes. The hook pointer is a plain variable: set it before the producer threads
+ * start and clear it after they are joined. mpsc_ring_test_reset_allocators() clears it too.
+ */
+typedef void (*mpsc_ring_test_claim_hook_fn)(uint64_t pos, void* item);
+void mpsc_ring_test_set_claim_hook(mpsc_ring_test_claim_hook_fn hook);
 
 #endif /* MPSC_RING_TEST_HOOKS_H */
