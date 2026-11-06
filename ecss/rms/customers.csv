@@ -1,0 +1,12 @@
+repo,tag,commit,file,path,why
+kyr_core,v5.0.0,aa7479c8d1dac8b5af72db5c875fd4144863184a,app/src/database/txn_queue/txn_queue.c,customers/kyr_core/app/src/database/txn_queue/txn_queue.c,"the write queue: one ring per environment, any request thread pushes a job, the environment's one writer thread pops batches and commits them"
+kyr_core,v5.0.0,aa7479c8d1dac8b5af72db5c875fd4144863184a,app/include/kyr/core/database/txn_queue.h,customers/kyr_core/app/include/kyr/core/database/txn_queue.h,"the queue's contract to every module: admission bounded, the wait for the commit unbounded"
+kyr_core,v5.0.0,aa7479c8d1dac8b5af72db5c875fd4144863184a,deps.txt,customers/kyr_core/deps.txt,"libmpscring and libmpscring-dev 1.0.8 pinned by SHA-256"
+kyr_drive,v4.5.1,fe2dc5faec20c9771ebfac3c7053d4c720ada4b9,app/src/database/repo/repo_file.c,customers/kyr_drive/app/src/database/repo/repo_file.c,"the drive's file records are written through kyr_core's queue"
+kyr_drive,v4.5.1,fe2dc5faec20c9771ebfac3c7053d4c720ada4b9,deps.txt,customers/kyr_drive/deps.txt,"the drive pins libmpscring 1.0.8"
+kyr_estate,v4.2.2,0b256551fb8abbc70c34a9c6d53f0916ce3af370,app/src/store.c,customers/kyr_estate/app/src/store.c,"every estate write is a job of kyr_core's queue"
+kyr_estate,v4.2.2,0b256551fb8abbc70c34a9c6d53f0916ce3af370,deps.txt,customers/kyr_estate/deps.txt,"the estate pins libmpscring 1.0.8"
+kyr_rms,v0.64.1,1c0c948a77e834d8bfe34438481099f0ec4aadc1,app/src/module/boot.c,customers/kyr_rms/app/src/module/boot.c,"the rms writes its identity and its security log through kyr_core's queue"
+kyr_rms,v0.64.1,1c0c948a77e834d8bfe34438481099f0ec4aadc1,deps.txt,customers/kyr_rms/deps.txt,"the rms pins libmpscring 1.0.8"
+kyr_server,v3.14.0,168f33b3f18f9f700191f6c263f34b644a8e8d02,deps.txt,customers/kyr_server/deps.txt,"the box's servers link libmpscring 1.0.8 at run time"
+kyr,v0.40.0,394e7280e70a0906e503a64df402883ba64a6541,deps.txt,customers/kyr/deps.txt,"the platform's release train ships libmpscring 1.0.8"

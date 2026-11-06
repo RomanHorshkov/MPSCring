@@ -1,0 +1,14 @@
+field,value
+key,MPSCRING
+name,"MPSCring: every durable write of the box handed from its submitters to the one writer"
+description,"The bounded multi-producer single-consumer ring of pointers kyr_core's write queue carries each write job through, from any request thread to the one writer thread of its environment. ECSS-E-ST-40C Rev.1 and ECSS-Q-ST-80C Rev.2, category B proposed; the requirements baseline is KYR's (the platform), the release qualified is 1.0.10."
+repo,MPSCring
+release,v1.0.10
+version,1.0.10
+commit,73bb6fe36fa58a356faf7c35864623147c53ed2c
+headers,app/mpscring.h
+doxygen_input,app/mpscring.h app/mpscring.c
+system,KYR
+api_prefix,mpsc_ring_
+api_tests,tests/UTs/unit_tests.c tests/ITs/integration_tests.c tests/stress/stress_mt.c
+api_example,tests/package/smoke.c

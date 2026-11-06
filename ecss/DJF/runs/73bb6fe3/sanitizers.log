@@ -1,0 +1,39 @@
+CC app/mpscring.c
+CC tests/UTs/unit_tests.c
+LD $ROOT/build/sanitizers/ut/ut
+CC tests/ITs/integration_tests.c
+LD $ROOT/build/sanitizers/it/it
+CC tests/stress/stress_mt.c
+LD $ROOT/build/sanitizers/stress/stress
+RUN build/sanitizers/ut/ut
+test_capacity_validation: PASS
+test_minimum_capacity_full_boundary: PASS
+test_null_payload_round_trip: PASS
+test_push_pop_fifo_single_thread: PASS
+test_wrap_around: PASS
+test_null_and_double_free_safety: PASS
+test_init_into_caller_owns_storage: PASS
+test_init_into_exact_size_at_every_alignment: PASS
+test_init_into_rejects_undersized_storage: PASS
+test_allocation_failure_path: PASS
+test_lock_free_rejection: PASS
+test_push_retries_when_enqueue_pos_races_underneath: PASS
+
+ALL UNIT TESTS PASSED
+RUN build/sanitizers/it/it
+[==========] mpscring_its: Running 3 test(s).
+[ RUN      ] test_simple_flow
+[       OK ] test_simple_flow
+[ RUN      ] test_storage_size_round_trip
+[       OK ] test_storage_size_round_trip
+[ RUN      ] test_concurrent_multi_producer_flow
+[       OK ] test_concurrent_multi_producer_flow
+[==========] mpscring_its: 3 test(s) run.
+[  PASSED  ] 3 test(s).
+RUN build/sanitizers/stress/stress
+MPSCring stress: 16 producers x 50000 items = 800000 total
+  consumed_count=800000 (expected 800000)
+  produced_sum=25769823776400000 consumed_sum=25769823776400000 (match: yes)
+  elapsed=0.381s  throughput=2099175 ops/s
+
+STRESS TEST PASSED (exactly-once proven via per-item bitmap, not just count/sum)

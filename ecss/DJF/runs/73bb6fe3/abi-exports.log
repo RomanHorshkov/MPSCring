@@ -1,0 +1,1 @@
+check_abi: libmpscring.so exports exactly the 8 declared functions, all @@MPSCRING_1

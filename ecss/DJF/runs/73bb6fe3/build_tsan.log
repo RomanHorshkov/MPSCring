@@ -1,0 +1,3 @@
+CC app/mpscring.c
+AR $ROOT/build/tsan/libmpscring.a
+LD $ROOT/build/tsan/libmpscring.so.1.0.10
