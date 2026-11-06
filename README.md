@@ -114,28 +114,34 @@ check on GCC/Clang.
   that the source builds; `utils/build_stress.sh` + `utils/run_stress.sh` build and run the
   stress test (results under `tests/results/stress/`); `utils/run_pipeline.sh` runs deps and
   tiers, template, ABI, every profile, release UTs, atomic-counter coverage, ITs, sanitizers,
-  stress, optional local TSan, packaging, the smoke test against the built debs and the
+  stress, TSan in every run (`GCC_BUILD_ENABLE_TSAN=1` in the project file), packaging, the smoke test against the built debs and the
   legacy-names, pragmas, tables and warnings gates of the pinned kyr-build (3.1.1: every profile under the whole warning set
   and `-Werror`, the tests included).
 
 ## Continuous integration
 
-Three workflows, a connected graph rather than independent races on every push:
+Four workflows, a connected graph rather than independent races on every push:
 
-- **Quality** (`.github/workflows/quality.yml`) — `build` fans out to strict GCC/Clang
-  compilation, release UTs plus the 100% atomic-counter coverage gate, and threaded
-  integration/stress. Integration/stress gates both ASan/UBSan/LSan and TSan; every branch
-  must pass before package installation and smoke testing. Also reusable by releases.
+- **Quality** (`.github/workflows/quality.yml`, cicd's `c-quality.yml@v2`, kind lib) — `build` fans
+  out to strict GCC/Clang compilation, release UTs plus the 100% atomic-counter coverage gate,
+  threaded integration, stress, ASan/UBSan/LSan and TSan, each after `build` alone; every one,
+  with the dependency-law, ABI and format gates, must pass before package installation and smoke
+  testing. Also reusable by releases.
 - **Security** (`.github/workflows/security.yml`) — CodeQL + GCC's `-fanalyzer`, on push/PR
   plus a weekly schedule.
-- **Release** (`.github/workflows/release.yml`) — requires Quality to pass, validates the
-  pushed tag matches `VERSION`, builds the hardened package, attaches a build-provenance
-  attestation, and uploads to the GitHub Release.
+- **Release** (`.github/workflows/release.yml`, cicd's `c-release.yml@v2`) — requires Quality to
+  pass, validates the pushed tag matches `VERSION`, builds the hardened package twice on two
+  runners, compares every hash, and uploads to the GitHub Release (no build-provenance
+  attestation: `attest` stays off). No GitHub release is published for the current version
+  (1.0.10): it is built twice to one hash in kyr-build's noble build root, tagged, and pinned by
+  sha256 in its consumers' `deps.txt`.
+- **Coverage badge** (`.github/workflows/coverage-badge.yml`) — after a successful Quality run on
+  master, commits the badge refreshed from its coverage summary.
 
 ## Dependencies
 
 - GCC or Clang with C11 support (build)
-- `fakeroot` and `dpkg-deb` (packaging)
+- `dpkg-deb` (packaging; kyr-build's `lib/deb.sh` needs no fakeroot)
 
 ## License
 
