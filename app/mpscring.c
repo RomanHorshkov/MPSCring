@@ -60,6 +60,7 @@ static mpsc_ring_test_free_fn          mpsc_ring_free_allocator             = fr
 static int                             mpsc_ring_enqueue_lock_free_override = -1;
 static int                             mpsc_ring_slot_lock_free_override    = -1;
 static mpsc_ring_test_push_hook_fn     mpsc_ring_push_hook                  = NULL;
+static mpsc_ring_test_claim_hook_fn    mpsc_ring_claim_hook                 = NULL;
 
 void mpsc_ring_test_set_allocators(mpsc_ring_test_aligned_alloc_fn aligned_allocator, mpsc_ring_test_calloc_fn calloc_allocator,
                                    mpsc_ring_test_free_fn free_allocator)
@@ -77,6 +78,7 @@ void mpsc_ring_test_reset_allocators(void)
     mpsc_ring_enqueue_lock_free_override = -1;
     mpsc_ring_slot_lock_free_override    = -1;
     mpsc_ring_push_hook                  = NULL;
+    mpsc_ring_claim_hook                 = NULL;
 }
 
 void mpsc_ring_test_set_lock_free_overrides(int enqueue_pos_is_lock_free, int slot_sequence_is_lock_free)
@@ -88,6 +90,11 @@ void mpsc_ring_test_set_lock_free_overrides(int enqueue_pos_is_lock_free, int sl
 void mpsc_ring_test_set_push_hook(mpsc_ring_test_push_hook_fn hook)
 {
     mpsc_ring_push_hook = hook;
+}
+
+void mpsc_ring_test_set_claim_hook(mpsc_ring_test_claim_hook_fn hook)
+{
+    mpsc_ring_claim_hook = hook;
 }
 
 static void* mpsc_ring_allocate_owned(size_t size)
@@ -336,6 +343,14 @@ int mpsc_ring_push(mpsc_ring_t* ring, void* item)
             pos = atomic_load_explicit(&ring->enqueue_pos, memory_order_relaxed);
         }
     }
+
+#ifdef MPSC_RING_TESTING
+    /* The window that keeps this algorithm from being formally lock-free: `pos` is claimed, its slot not yet published. */
+    if(mpsc_ring_claim_hook)
+    {
+        mpsc_ring_claim_hook(pos, item);
+    }
+#endif
 
     slot->data = item;
     atomic_store_explicit(&slot->sequence, pos + 1u, memory_order_release);
