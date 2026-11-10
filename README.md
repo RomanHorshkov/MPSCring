@@ -122,14 +122,14 @@ check on GCC/Clang.
 
 Four workflows, a connected graph rather than independent races on every push:
 
-- **Quality** (`.github/workflows/quality.yml`, cicd's `c-quality.yml@v2`, kind lib) — `build` fans
+- **Quality** (`.github/workflows/quality.yml`, cicd's `c-quality.yml@v2.3.0`, kind lib) — `build` fans
   out to strict GCC/Clang compilation, release UTs plus the 100% atomic-counter coverage gate,
   threaded integration, stress, ASan/UBSan/LSan and TSan, each after `build` alone; every one,
   with the dependency-law, ABI and format gates, must pass before package installation and smoke
   testing. Also reusable by releases.
 - **Security** (`.github/workflows/security.yml`) — CodeQL + GCC's `-fanalyzer`, on push/PR
   plus a weekly schedule.
-- **Release** (`.github/workflows/release.yml`, cicd's `c-release.yml@v2`) — requires Quality to
+- **Release** (`.github/workflows/release.yml`, cicd's `c-release.yml@v2.3.0`) — requires Quality to
   pass, validates the pushed tag matches `VERSION`, builds the hardened package twice on two
   runners, compares every hash, and uploads to the GitHub Release (no build-provenance
   attestation: `attest` stays off). No GitHub release is published for the current version
